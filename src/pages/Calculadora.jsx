@@ -1,13 +1,18 @@
 /**
  * Hecho por JESUS COSSIO DEV
- * Optimizaciones de arquitectura, accesibilidad y experiencia de usuario
  * FE-08: Borrador persistente + beforeunload | FE-41: Targets táctiles | FE-44: Tuteo guiado
+ * FE-WIZARD: Máximo 3 campos por pantalla, fondo claro, opciones en tarjetas
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Save, Plus, X, ChevronDown, ChevronUp, MapPin, Lightbulb, AlertTriangle, Check, ChevronRight, ChevronLeft, Zap } from "lucide-react";
 import { theme as t } from "../styles/theme";
 import { sanitizar, validarNumero } from "../utils/validar";
+import {
+  WizardPantalla, WizardHeader, WizardProgress, WizardBanner,
+  WizardCampo, WizardInput, WizardSelect, WizardOpciones,
+  WizardCard, WizardNav, WizardStepDots,
+} from "../components/WizardForm";
 
 const BORRADOR_KEY = "navira_borrador_calculadora";
 
@@ -113,6 +118,8 @@ function Calculadora({ vehiculos, viajes, rutas = [], peajes = [], conductores =
   // ── WIZARD (FE-08 / FE-41 / FE-44) ──────────────────────────────────────────
   const [modoGuiado,       setModoGuiado]         = useState(true);
   const [pasoActual,       setPasoActual]         = useState(1);
+  const [subPasoWizard,    setSubPasoWizard]      = useState(1);
+  const TOTAL_SUBPASOS_WIZARD = 10; // sub-pasos totales en modo guiado
   const borradorGuardadoRef = useRef(false);
 
 
@@ -644,6 +651,420 @@ const guardarRutaFrecuente = async () => {
     </button>
   );
 
+  // ── TIPOS DE CARGA para tarjetas ──────────────────────────────────────────
+  const TIPOS_CARGA_OPCIONES = [
+    { value:"Granel seco",   label:"Granel seco",   icono:"🌾" },
+    { value:"Refrigerado",   label:"Refrigerado",   icono:"🧊" },
+    { value:"Contenedor",    label:"Contenedor",    icono:"📦" },
+    { value:"Líquido",       label:"Líquido",       icono:"🛢️" },
+    { value:"Carga general", label:"General",       icono:"📋" },
+    { value:"Peligrosa",     label:"Peligrosa",     icono:"⚠️" },
+    { value:"Sobredimensión",label:"Sobredimensión",icono:"🏗️" },
+    { value:"Otro",          label:"Otro",          icono:"❓" },
+  ];
+
+  const MODO_FLETE_OPCIONES = [
+    { value:"porTon",   label:"Por tonelada",  icono:"⚖️",  sub:"Flete × Tons" },
+    { value:"global",   label:"Flete global",  icono:"💵",  sub:"Monto fijo" },
+    { value:"porKm",    label:"Por kilómetro", icono:"📏",  sub:"Valor × km" },
+  ];
+
+  const MODO_COMB_OPCIONES = [
+    { value:"auto",   label:"Por rendimiento", icono:"⚙️",  sub:"Km/Galón" },
+    { value:"manual", label:"Total galones",   icono:"⛽",  sub:"Ingreso directo" },
+  ];
+
+  const MODO_CONDUCTOR_OPCIONES = [
+    { value:"porcentaje", label:"Porcentaje",  icono:"%" },
+    { value:"fijo",       label:"Valor fijo",  icono:"$" },
+  ];
+
+  // ── BANNERS sub-pasos wizard ───────────────────────────────────────────────
+  const WIZARD_SUB_PASOS = [
+    { icono:"🚛", titulo:"¿Qué camión sale hoy?",       mensaje:"Selecciona la placa del vehículo y la fecha de cargue." },
+    { icono:"👨‍✈️", titulo:"¿Quién lo maneja?",           mensaje:"Elige el conductor del viaje. Puedes omitir este paso." },
+    { icono:"📦", titulo:"¿Qué tipo de carga llevan?",  mensaje:"Toca la opción que mejor describe la mercancía." },
+    { icono:"📍", titulo:"¿Cuál es la ruta?",            mensaje:"Origen → Destino y el nombre de la empresa que paga." },
+    { icono:"⚖️", titulo:"¿Cuántas toneladas?",         mensaje:"Ingresa el tonelaje y los kilómetros del recorrido." },
+    { icono:"💵", titulo:"¿Cómo cobran el flete?",      mensaje:"Elige el modo de pago y el valor del flete." },
+    { icono:"⛽", titulo:"Combustible",                  mensaje:"¡Vas muy bien, ya casi acabamos! Ingresa el rendimiento o el consumo total." },
+    { icono:"🛣️", titulo:"Peajes y costos extra",       mensaje:"Casi terminamos. Agrega los peajes y los gastos adicionales." },
+    { icono:"💰", titulo:"Pago al conductor",            mensaje:"¿Cuánto le corresponde al conductor por este viaje?" },
+    { icono:"✅", titulo:"¡Último paso!",               mensaje:"Revisa el resumen del viaje y guárdalo." },
+  ];
+  const subBanner = WIZARD_SUB_PASOS[subPasoWizard - 1] || WIZARD_SUB_PASOS[0];
+
+  const irSubPasoSiguiente = () => setSubPasoWizard(s => Math.min(s + 1, TOTAL_SUBPASOS_WIZARD));
+  const irSubPasoAnterior  = () => setSubPasoWizard(s => Math.max(s - 1, 1));
+
+  // ── MODO GUIADO: render completo con fondo claro ──────────────────────────
+  if (modoGuiado) {
+    return (
+      <WizardPantalla>
+        <WizardHeader
+          titulo="Calculadora"
+          onVolver={() => navigate(-1)}
+          badge={
+            <button type="button" onClick={() => setModoGuiado(false)}
+              style={{ display:"flex",alignItems:"center",gap:"4px",
+                background:"#EFF6FF",border:"1.5px solid #BFDBFE",
+                borderRadius:"20px",padding:"5px 10px",
+                fontSize:"11px",fontWeight:700,color:"#3B82F6",cursor:"pointer" }}>
+              <Zap size={11}/> Avanzado
+            </button>
+          }
+        />
+        <WizardProgress
+          total={TOTAL_SUBPASOS_WIZARD}
+          actual={subPasoWizard}
+          etiquetas={WIZARD_SUB_PASOS.map(p => p.titulo)}
+        />
+        <WizardBanner icono={subBanner.icono} titulo={subBanner.titulo} mensaje={subBanner.mensaje} />
+
+        {/* ── SUB-PASO 1: Placa y Fecha ── */}
+        {subPasoWizard === 1 && (
+          <WizardCard>
+            <WizardCampo label="¿Qué camión va a salir?" obligatorio>
+              <WizardSelect value={placa} onChange={e => setPlaca(e.target.value)}>
+                <option value="">Seleccionar vehículo...</option>
+                {vehiculos.map(v => (
+                  <option key={v.firestoreId} value={v.placa}>
+                    🚛 {v.placa}{v.tipoVehiculo ? ` · ${v.tipoVehiculo}` : ""}
+                  </option>
+                ))}
+              </WizardSelect>
+            </WizardCampo>
+            <WizardCampo label="Fecha de cargue" obligatorio>
+              <WizardInput type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
+            </WizardCampo>
+            <WizardCampo label="Fecha de descargue (opcional)">
+              <WizardInput type="date" value={fechaDescarga} onChange={e => setFechaDescarga(e.target.value)} />
+            </WizardCampo>
+          </WizardCard>
+        )}
+
+        {/* ── SUB-PASO 2: Conductor ── */}
+        {subPasoWizard === 2 && (
+          <WizardCard>
+            <WizardCampo label="¿Quién maneja el camión?" ayuda="Si el conductor no está en la lista, escribe su nombre abajo.">
+              <WizardSelect value={conductor} onChange={e => setConductor(e.target.value)}>
+                <option value="">Seleccionar conductor...</option>
+                {conductores.map(c => (
+                  <option key={c.firestoreId} value={c.nombre}>{c.nombre}</option>
+                ))}
+              </WizardSelect>
+            </WizardCampo>
+            {!conductor && (
+              <WizardCampo label="O escribe el nombre del conductor">
+                <WizardInput
+                  value={conductor}
+                  onChange={e => setConductor(e.target.value)}
+                  placeholder="Nombre del conductor"
+                />
+              </WizardCampo>
+            )}
+          </WizardCard>
+        )}
+
+        {/* ── SUB-PASO 3: Tipo de carga y producto ── */}
+        {subPasoWizard === 3 && (
+          <WizardCard>
+            <WizardCampo label="¿Qué tipo de carga llevan?">
+              <WizardOpciones
+                opciones={TIPOS_CARGA_OPCIONES}
+                valor={tipoCarga}
+                onChange={setTipoCarga}
+                columnas={4}
+              />
+            </WizardCampo>
+            <WizardCampo label="¿Qué producto es?" ayuda="Ej: Maíz, Cemento, Aceite...">
+              <WizardInput
+                value={producto}
+                onChange={e => setProducto(e.target.value)}
+                placeholder="Nombre del producto"
+              />
+            </WizardCampo>
+          </WizardCard>
+        )}
+
+        {/* ── SUB-PASO 4: Ruta y empresa ── */}
+        {subPasoWizard === 4 && (
+          <WizardCard>
+            <WizardCampo label="Ruta del viaje (Origen → Destino)" obligatorio>
+              <WizardInput
+                value={ruta}
+                onChange={e => setRuta(e.target.value)}
+                placeholder="Ej: Barranquilla → Bogotá"
+              />
+            </WizardCampo>
+            <WizardCampo label="¿Quién contrata el flete (empresa)?" obligatorio>
+              <WizardSelect value={empresa} onChange={e => {
+                setEmpresa(e.target.value);
+                const emp = empresas.find(em => (em.razonSocial||em.nombre||"").trim() === e.target.value);
+                if (emp?.nit) setNitEmpresa(emp.nit);
+              }}>
+                <option value="">Seleccionar empresa...</option>
+                {[...new Set([
+                  ...empresas.map(em=>(em.razonSocial||em.nombre||"").trim()),
+                  ...viajes.map(v=>v.emp).filter(Boolean),
+                ])].filter(Boolean).map(e=><option key={e} value={e}>{e}</option>)}
+              </WizardSelect>
+            </WizardCampo>
+            {!empresa && (
+              <WizardCampo label="O escribe el nombre de la empresa">
+                <WizardInput
+                  value={empresa}
+                  onChange={e => setEmpresa(e.target.value)}
+                  placeholder="Nombre de la empresa"
+                />
+              </WizardCampo>
+            )}
+          </WizardCard>
+        )}
+
+        {/* ── SUB-PASO 5: Kilómetros y Tonelaje ── */}
+        {subPasoWizard === 5 && (
+          <WizardCard>
+            <WizardCampo label="¿Cuántas toneladas van?" obligatorio>
+              <WizardInput
+                type="number"
+                value={tonelaje}
+                onChange={e => setTonelaje(e.target.value)}
+                placeholder="Ej: 30.5"
+              />
+            </WizardCampo>
+            <WizardCampo label="Kilómetros cargado" obligatorio>
+              <WizardInput
+                type="number"
+                value={kmCargado}
+                onChange={e => setKmCargado(e.target.value)}
+                placeholder="Ej: 985"
+              />
+            </WizardCampo>
+            <WizardCampo label="Kilómetros vacío (de vuelta)" ayuda="Si el camión regresa vacío, ingresa esa distancia.">
+              <WizardInput
+                type="number"
+                value={kmVacio}
+                onChange={e => setKmVacio(e.target.value)}
+                placeholder="Ej: 200"
+              />
+            </WizardCampo>
+          </WizardCard>
+        )}
+
+        {/* ── SUB-PASO 6: Modo de flete y valor ── */}
+        {subPasoWizard === 6 && (
+          <WizardCard>
+            <WizardCampo label="¿Cómo cobran el flete?">
+              <WizardOpciones
+                opciones={MODO_FLETE_OPCIONES}
+                valor={modoFlete}
+                onChange={setModoFlete}
+                columnas={3}
+              />
+            </WizardCampo>
+            <WizardCampo
+              label={modoFlete === "porTon" ? "Valor por tonelada ($)" : modoFlete === "porKm" ? "Valor por km ($)" : "Flete global ($)"}
+              obligatorio
+            >
+              <WizardInput
+                type="number"
+                value={fleteTon}
+                onChange={e => setFleteTon(e.target.value)}
+                placeholder="$ 0"
+              />
+            </WizardCampo>
+            {n(fleteTon) > 0 && n(tonelaje) > 0 && modoFlete === "porTon" && (
+              <div style={{
+                background:"#F0FDF4",border:"1.5px solid #BBF7D0",
+                borderRadius:"12px",padding:"12px 16px",
+              }}>
+                <p style={{ fontSize:"14px",color:"#059669",fontWeight:700,margin:0 }}>
+                  💰 Flete total estimado: ${Math.round(n(fleteTon)*n(tonelaje)).toLocaleString("es-CO")}
+                </p>
+              </div>
+            )}
+          </WizardCard>
+        )}
+
+        {/* ── SUB-PASO 7: Combustible ── */}
+        {subPasoWizard === 7 && (
+          <WizardCard>
+            <WizardCampo label="¿Cómo calculas el combustible?">
+              <WizardOpciones
+                opciones={MODO_COMB_OPCIONES}
+                valor={modoComb}
+                onChange={setModoComb}
+                columnas={2}
+              />
+            </WizardCampo>
+            {modoComb === "auto" ? (
+              <>
+                <WizardCampo label="Rendimiento cargado (km/gal)" obligatorio>
+                  <WizardInput
+                    type="number"
+                    value={rendCargado}
+                    onChange={e => setRendCargado(e.target.value)}
+                    placeholder="Ej: 8.5"
+                  />
+                </WizardCampo>
+                <WizardCampo label="Rendimiento vacío (km/gal)">
+                  <WizardInput
+                    type="number"
+                    value={rendVacio}
+                    onChange={e => setRendVacio(e.target.value)}
+                    placeholder="Ej: 12"
+                  />
+                </WizardCampo>
+              </>
+            ) : (
+              <WizardCampo label="Total de galones consumidos" obligatorio>
+                <WizardInput
+                  type="number"
+                  value={galManual}
+                  onChange={e => setGalManual(e.target.value)}
+                  placeholder="Total galones"
+                />
+              </WizardCampo>
+            )}
+            <WizardCampo label="Precio del ACPM ($ por galón)" obligatorio>
+              <WizardInput
+                type="number"
+                value={precioAcpm}
+                onChange={e => setPrecioAcpm(e.target.value)}
+                placeholder="Ej: 12500"
+              />
+            </WizardCampo>
+          </WizardCard>
+        )}
+
+        {/* ── SUB-PASO 8: Peajes y gastos extra ── */}
+        {subPasoWizard === 8 && (
+          <WizardCard>
+            <WizardCampo label="Categoría del vehículo (peajes)">
+              <WizardSelect value={categoria} onChange={e => setCategoria(e.target.value)}>
+                {["I","II","III","IV","V","VI","VII"].map(c=>(
+                  <option key={c} value={c}>Categoría {c}</option>
+                ))}
+              </WizardSelect>
+            </WizardCampo>
+            <WizardCampo label="Carpado / Descarpado ($)" ayuda="Dejar en 0 si no aplica">
+              <WizardInput
+                type="number"
+                value={carpado}
+                onChange={e => setCarpado(e.target.value)}
+                placeholder="$ 0"
+              />
+            </WizardCampo>
+            <WizardCampo label="Otros gastos del viaje ($)" ayuda="Estadías, viáticos, permisos...">
+              <WizardInput
+                type="number"
+                value={gastosViaje}
+                onChange={e => setGastosViaje(e.target.value)}
+                placeholder="$ 0"
+              />
+            </WizardCampo>
+          </WizardCard>
+        )}
+
+        {/* ── SUB-PASO 9: Pago conductor ── */}
+        {subPasoWizard === 9 && (
+          <WizardCard>
+            <WizardCampo label="¿Cómo se le paga al conductor?">
+              <WizardOpciones
+                opciones={MODO_CONDUCTOR_OPCIONES}
+                valor={modoConductor}
+                onChange={setModoConductor}
+                columnas={2}
+              />
+            </WizardCampo>
+            <WizardCampo
+              label={modoConductor === "porcentaje" ? "Porcentaje del flete (%)" : "Valor fijo ($)"}
+              ayuda={modoConductor === "porcentaje" ? "Ej: 25 significa el 25% del flete" : "Monto fijo en pesos"}
+            >
+              <WizardInput
+                type="number"
+                value={porcCond}
+                onChange={e => setPorcCond(e.target.value)}
+                placeholder={modoConductor === "porcentaje" ? "Ej: 25" : "$ 0"}
+              />
+            </WizardCampo>
+          </WizardCard>
+        )}
+
+        {/* ── SUB-PASO 10: Resumen y Guardar ── */}
+        {subPasoWizard === 10 && (() => {
+          const kmTotal = n(kmCargado) + n(kmVacio);
+          const galCarg = n(modoComb)==="manual" ? 0 : (n(kmCargado) / (n(rendCargado)||1));
+          const galVac  = n(modoComb)==="manual" ? 0 : (n(kmVacio) / (n(rendVacio)||1));
+          const galTot  = modoComb==="manual" ? n(galManual) : galCarg + galVac;
+          const costoAcpm = galTot * n(precioAcpm);
+          const fleteTotal = modoFlete==="porTon" ? n(fleteTon)*n(tonelaje) : modoFlete==="porKm" ? n(fleteTon)*kmTotal : n(fleteTon);
+          const costoConduct = modoConductor==="porcentaje" ? fleteTotal*(n(porcCond)/100) : n(porcCond);
+          const totalCostos  = costoAcpm + costoConduct + n(carpado) + n(gastosViaje);
+          const gananciaNeta = fleteTotal - totalCostos;
+          const margen = fleteTotal>0 ? (gananciaNeta/fleteTotal)*100 : 0;
+          const margenColor = margen>=20?"#10B981":margen>=10?"#F59E0B":"#EF4444";
+          return (
+            <WizardCard>
+              <div style={{ textAlign:"center",marginBottom:"20px" }}>
+                <p style={{ fontSize:"13px",fontWeight:700,color:"#3B82F6",
+                  textTransform:"uppercase",letterSpacing:"0.08em",margin:"0 0 6px" }}>
+                  Ganancia estimada
+                </p>
+                <p style={{ fontSize:"36px",fontWeight:900,
+                  color:gananciaNeta>=0?"#10B981":"#EF4444",margin:"0 0 4px" }}>
+                  {fmt(gananciaNeta)}
+                </p>
+                <p style={{ fontSize:"15px",fontWeight:700,color:margenColor,margin:0 }}>
+                  Margen: {margen.toFixed(1)}%
+                </p>
+              </div>
+              {[
+                ["Placa",        placa||"—"],
+                ["Ruta",         ruta||"—"],
+                ["Empresa",      empresa||"—"],
+                ["Tonelaje",     tonelaje?`${tonelaje} ton`:"—"],
+                ["Flete total",  fmt(fleteTotal)],
+                ["Combustible",  fmt(costoAcpm)],
+                ["Conductor",    fmt(costoConduct)],
+                ["Otros costos", fmt(n(carpado)+n(gastosViaje))],
+              ].map(([k,v])=>(
+                <div key={k} style={{ display:"flex",justifyContent:"space-between",
+                  padding:"8px 0",borderBottom:"1px solid #E0E9FF" }}>
+                  <span style={{ fontSize:"15px",color:"#6B7280",fontWeight:600 }}>{k}</span>
+                  <span style={{ fontSize:"15px",color:"#111827",fontWeight:700 }}>{v}</span>
+                </div>
+              ))}
+            </WizardCard>
+          );
+        })()}
+
+        <WizardStepDots total={TOTAL_SUBPASOS_WIZARD} actual={subPasoWizard} />
+        <WizardNav
+          subPaso={subPasoWizard}
+          totalSubPasos={TOTAL_SUBPASOS_WIZARD}
+          onAnterior={irSubPasoAnterior}
+          onSiguiente={irSubPasoSiguiente}
+          onGuardar={guardarViaje}
+          guardando={guardando}
+          labelGuardar="Guardar viaje"
+        />
+        {/* Nota: campo NIT e info de retorno pueden completarse en modo Avanzado */}
+        <p style={{ textAlign:"center",fontSize:"12px",color:"#9CA3AF",
+          margin:"12px 0 0",padding:"0 20px" }}>
+          ¿Necesitas opciones de peajes, descuentos o retorno?{" "}
+          <button type="button" onClick={() => setModoGuiado(false)}
+            style={{ background:"none",border:"none",color:"#3B82F6",
+              fontWeight:700,cursor:"pointer",fontSize:"12px",padding:0 }}>
+            Usa el modo Avanzado
+          </button>
+        </p>
+      </WizardPantalla>
+    );
+  }
+
+  // ── MODO AVANZADO: formulario completo (oscuro, original) ─────────────────
   return (
     <div style={styles.pantalla}>
 
@@ -656,66 +1077,23 @@ const guardarRutaFrecuente = async () => {
         <h1 style={styles.titulo}>Calculadora</h1>
         <button
           type="button"
-          aria-label={modoGuiado ? "Cambiar a modo avanzado" : "Cambiar a modo guiado"}
-          onClick={() => setModoGuiado(!modoGuiado)}
+          aria-label="Cambiar a modo guiado"
+          onClick={() => { setModoGuiado(true); setSubPasoWizard(1); }}
           style={{
             display:"flex", alignItems:"center", gap:"5px",
-            background: modoGuiado ? t.colors.blueSoft : t.colors.bgSection,
-            border: `1.5px solid ${modoGuiado ? t.colors.blueBorder : t.colors.border}`,
+            background: t.colors.bgSection,
+            border: `1.5px solid ${t.colors.border}`,
             borderRadius: t.radius.full,
             padding:"5px 10px",
             fontSize:"11px", fontWeight: t.fonts.weightBold,
-            color: modoGuiado ? t.colors.blueText : t.colors.textSecondary,
+            color: t.colors.textSecondary,
             cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
           }}
         >
           <Zap size={12} strokeWidth={2.5} />
-          {modoGuiado ? "Guiado" : "Avanzado"}
+          Guiado
         </button>
       </div>
-
-      {/* ── WIZARD: barra de progreso y banner ── */}
-      {modoGuiado && (
-        <div style={{ padding:"12px 16px 0" }}>
-          {/* Barra de pasos */}
-          <div style={{ display:"flex", gap:"6px", marginBottom:"10px" }}>
-            {WIZARD_PASOS.map((p) => (
-              <button
-                key={p.num}
-                type="button"
-                aria-label={`Ir al paso ${p.num}: ${p.titulo}`}
-                aria-current={pasoActual === p.num ? "step" : undefined}
-                onClick={() => setPasoActual(p.num)}
-                style={{
-                  flex:1, height:"4px", border:"none", borderRadius:"2px",
-                  cursor:"pointer", padding:0,
-                  background: pasoActual >= p.num ? t.colors.blue : t.colors.bgSection,
-                  transition:"background 0.3s",
-                }}
-              />
-            ))}
-          </div>
-          {/* Banner motivacional */}
-          <div style={{
-            display:"flex", alignItems:"center", gap:"10px",
-            background: t.colors.bgCard,
-            border:`1.5px solid ${t.colors.blueBorder}`,
-            borderRadius: t.radius.md,
-            padding:"12px 14px",
-            marginBottom:"4px",
-          }}>
-            <span style={{ fontSize:"24px", flexShrink:0 }}>{pasoInfo.icono}</span>
-            <div>
-              <p style={{ fontSize:"10px", fontWeight:t.fonts.weightBold, color:t.colors.textTertiary, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 2px" }}>
-                Paso {pasoActual} de 4 — {pasoInfo.titulo}
-              </p>
-              <p style={{ fontSize:t.fonts.sizeSm, color:t.colors.textPrimary, margin:0, lineHeight:1.4 }}>
-                {pasoInfo.banner}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
 
 {rutas.length > 0 && (
