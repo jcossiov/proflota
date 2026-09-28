@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Funciones auxiliares de autenticación y propiedad
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // ── 1. Datos privados de cada usuario (flota, viajes, finanzas) ──
+    match /usuarios/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /{subcoleccion=**} {
+        allow read, write: if isOwner(uid);
+      }
+    }
+
+    // ── 2. Catálogo público de Peajes Nacionales ──
+    match /peajes/{peajeId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Solo actualizable por scripts administrativos o Cloud Functions
+    }
+
+    // ── 3. [BE-04] Códigos de Invitación Beta ──
+    // VULNERABILIDAD PREVIA: 'allow read: if true' concedía 'list', permitiendo volcar la colección
+    // entera vía API REST anónima y extraer 'BETA2026V1'.
+    // SOLUCIÓN BE-04: Se permite 'get' puntual (getDoc) para validar el código ingresado en registro,
+    // pero se prohíbe de forma estricta 'list' (enumeración de colección) y toda escritura directa.
+    match /codigos_beta/{codigoId} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ── 4. Vinculación de cuentas con Telegram Bot ──
+    match /telegram_vinculos/{codigo} {
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow get: if true;
+      allow list, update, delete: if false;
+    }
+
+    // ── 5. Sesiones e Idempotencia del Bot (Exclusivas de Cloud Functions / Admin SDK) ──
+    // Admin SDK opera con privilegios de servicio y elude estas reglas; clientes web tienen acceso denegado.
+    match /telegram_sesiones/{chatId} {
+      allow read, write: if false;
+    }
+
+    match /telegram_updates/{updateId} {
+      allow read, write: if false;
+    }
+
+    // ── 6. Regla por defecto Fail-Closed para cualquier colección no declarada ──
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -12,17 +12,30 @@ const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 initializeApp();
 const db = getFirestore();
 
-const TOKEN = process.env.TELEGRAM_TOKEN;
-const API = () => `https://api.telegram.org/bot${TOKEN}`;
+const getTelegramToken = () => process.env.TELEGRAM_TOKEN;
+const getTelegramApiUrl = () => `https://api.telegram.org/bot${getTelegramToken()}`;
 
 // ── Utilidades ──────────────────────────────────────────────
 
 async function enviar(chatId, texto) {
-  await fetch(`${API()}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text: texto, parse_mode: "HTML" }),
-  });
+  const token = getTelegramToken();
+  if (!token) {
+    console.error("[botNavira] ERROR CRÍTICO: TELEGRAM_TOKEN no está montado ni configurado en las variables de entorno.");
+    return;
+  }
+  try {
+    const res = await fetch(`${getTelegramApiUrl()}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: texto, parse_mode: "HTML" }),
+    });
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "");
+      console.error(`[botNavira] Error devuelto por Telegram API (${res.status}): ${errorBody}`);
+    }
+  } catch (errNet) {
+    console.error("[botNavira] Excepción de red al enviar mensaje a Telegram:", errNet);
+  }
 }
 
 const fmt = (n) => "$" + Math.round(n || 0).toLocaleString("es-CO");
@@ -902,17 +915,25 @@ async function procesarMensaje(chatId, texto) {
 exports.botNavira = onRequest(
   {
     region: "us-central1",
-    cors: true,
+    cors: false, // BE-06: Deshabilitar CORS para webhook directo de Telegram
     maxInstances: 10,
     memory: "256MiB",
     timeoutSeconds: 30,
+    secrets: ["TELEGRAM_SECRET", "TELEGRAM_TOKEN"], // BE-05: Montar secretos de Cloud Secret Manager
   },
   async (req, res) => {
   try {
-    // Seguridad: solo aceptar peticiones reales de Telegram (secret token)
+    // BE-06: 1. Filtrado de método HTTP estricto (solo POST)
+    if (req.method !== "POST") {
+      return res.status(405).send("Method Not Allowed");
+    }
+
+    // BE-06: 2. Seguridad Fail-Closed: Solo aceptar peticiones con secret token verificado
+    const expectedSecret = process.env.TELEGRAM_SECRET;
     const secretRecibido = req.get("X-Telegram-Bot-Api-Secret-Token");
-    if (process.env.TELEGRAM_SECRET && secretRecibido !== process.env.TELEGRAM_SECRET) {
-      console.warn("Petición rechazada: secret token inválido");
+
+    if (!expectedSecret || !secretRecibido || secretRecibido !== expectedSecret) {
+      console.warn("[botNavira] Petición rechazada (fail-closed): secret token ausente, no configurado o inválido.");
       return res.status(403).send("Forbidden");
     }
     const update = req.body;
