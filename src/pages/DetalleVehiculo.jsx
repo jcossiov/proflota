@@ -169,12 +169,14 @@ function DetalleVehiculo({ vehiculos, viajes = [], conductores = [], mantenimien
   const [guardandoMant, setGuardandoMant] = useState(false);
 
   const guardarKm = () => {
-  const val = Number(kmTemp)||0;
-  setKmOdometro(val);
-  onEditarVehiculo(vehiculo.firestoreId, { kmOdometro: val }).catch(()=>{});
-  setEditandoKm(false);
-  setKmTemp("");
-};
+    const val = Number(kmTemp) || 0;
+    setKmOdometro(val);
+    onEditarVehiculo(vehiculo.firestoreId, { kmOdometro: val }).catch(() => {
+      mostrarToast("Error al actualizar odómetro", "error");
+    });
+    setEditandoKm(false);
+    setKmTemp("");
+  };
 
 const guardarMantenimiento = async () => {
   if (!kmMant) { mostrarToast("Ingresa el km al realizar el mantenimiento", "error"); return; }
@@ -265,11 +267,12 @@ const mantVehiculo = mantenimientos.filter(m => m.placa === vehiculo?.placa);
     setMesActual(m); setAnioActual(a);
   };
 
-  // Hoja de vida
   const actualizarHV = (clave, valor) => {
-    const nuevo = {...hvData, [clave]:valor};
+    const nuevo = { ...hvData, [clave]: valor };
     setHvData(nuevo);
-    onEditarVehiculo(vehiculo.firestoreId, { hvData: nuevo }).catch(()=>{});
+    onEditarVehiculo(vehiculo.firestoreId, { hvData: nuevo }).catch(() => {
+      mostrarToast("Error al guardar en hoja de vida", "error");
+    });
   };
 
   const TIPOS_PERMITIDOS = ["image/jpeg","image/png","application/pdf"];

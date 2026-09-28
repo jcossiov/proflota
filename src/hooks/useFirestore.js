@@ -1,7 +1,17 @@
+// Hecho por JESUS COSSIO DEV
+/**
+ * useFirestore.js — Capa de persistencia en tiempo real con Firestore
+ * Incluye:
+ * - Error handlers en todos los onSnapshot (FE-10)
+ * - serverTimestamp() en escrituras y actualizaciones (FE-50)
+ * - Incremento atómico de odómetro con increment() (FE-45)
+ * - Desmontaje seguro de listeners y prevención de fugas (CR-14)
+ */
 import { useState, useEffect } from "react";
 import {
   collection, doc, onSnapshot, addDoc,
   updateDoc, deleteDoc, query, orderBy,
+  serverTimestamp, increment
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -18,7 +28,7 @@ export function useFirestore(uid) {
   const [configMant,     setConfigMant]     = useState([]);
   const [gastosVehiculo, setGastosVehiculo] = useState([]);
   const [gastosFijos,    setGastosFijos]    = useState([]);
-  const [cuentasCobro, setCuentasCobro]     = useState([]);
+  const [cuentasCobro,   setCuentasCobro]   = useState([]);
 
   const rutaVehiculos    = uid ? `usuarios/${uid}/vehiculos`       : null;
   const rutaViajes       = uid ? `usuarios/${uid}/viajes`          : null;
@@ -31,7 +41,7 @@ export function useFirestore(uid) {
   const rutaConductores  = uid ? `usuarios/${uid}/conductores`     : null;
   const rutaCuentas      = uid ? `usuarios/${uid}/cuentas_cobro`   : null;
 
-  // ── RESET al cambiar de usuario (previene data leakage entre cuentas) ──
+  // ── RESET al cambiar de usuario ──
   useEffect(() => {
     setVehiculos([]);
     setViajes([]);
@@ -47,227 +57,381 @@ export function useFirestore(uid) {
     setCuentasCobro([]);
   }, [uid]);
 
+  // Handler genérico de error para onSnapshot (FE-10)
+  const manejarErrorSnapshot = (nombre) => (err) => {
+    console.warn(`[Firestore onSnapshot] Error en ${nombre}:`, err.message || err);
+    setCargando(false);
+  };
+
+  // 1. Vehículos
   useEffect(() => {
     if (!rutaVehiculos) return;
     const q = query(collection(db, rutaVehiculos));
-    const unsub = onSnapshot(q, (snap) => {
-      setVehiculos(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-      setCargando(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setVehiculos(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+        setCargando(false);
+      },
+      manejarErrorSnapshot("vehiculos")
+    );
     return () => unsub();
   }, [rutaVehiculos]);
 
+  // 2. Viajes
   useEffect(() => {
     if (!rutaViajes) return;
     const q = query(collection(db, rutaViajes), orderBy("fecha", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      setViajes(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setViajes(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("viajes")
+    );
     return () => unsub();
   }, [rutaViajes]);
 
+  // 3. Empresas
   useEffect(() => {
     if (!rutaEmpresas) return;
     const q = query(collection(db, rutaEmpresas));
-    const unsub = onSnapshot(q, (snap) => {
-      setEmpresas(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setEmpresas(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("empresas")
+    );
     return () => unsub();
   }, [rutaEmpresas]);
 
+  // 4. Rutas
   useEffect(() => {
     if (!rutaRutas) return;
     const q = query(collection(db, rutaRutas));
-    const unsub = onSnapshot(q, (snap) => {
-      setRutas(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setRutas(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("rutas")
+    );
     return () => unsub();
   }, [rutaRutas]);
 
+  // 5. Mantenimientos
   useEffect(() => {
     if (!rutaMant) return;
     const q = query(collection(db, rutaMant), orderBy("fecha", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      setMantenimientos(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setMantenimientos(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("mantenimientos")
+    );
     return () => unsub();
   }, [rutaMant]);
 
-  // Peajes — colección global, pero solo se lee con usuario autenticado
+  // 6. Peajes globales
   useEffect(() => {
     if (!uid) return;
     const q = query(collection(db, "peajes"));
-    const unsub = onSnapshot(q, (snap) => {
-      setPeajes(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setPeajes(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("peajes")
+    );
     return () => unsub();
   }, [uid]);
 
+  // 7. Configuración Mantenimiento
   useEffect(() => {
     if (!rutaConfigMant) return;
     const q = query(collection(db, rutaConfigMant));
-    const unsub = onSnapshot(q, (snap) => {
-      setConfigMant(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setConfigMant(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("config_mant")
+    );
     return () => unsub();
   }, [rutaConfigMant]);
 
+  // 8. Gastos de Vehículo
   useEffect(() => {
     if (!rutaGastos) return;
     const q = query(collection(db, rutaGastos), orderBy("fecha", "desc"));
-    const unsub = onSnapshot(q, (snap) => {
-      setGastosVehiculo(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setGastosVehiculo(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("gastos_vehiculo")
+    );
     return () => unsub();
   }, [rutaGastos]);
 
+  // 9. Gastos Fijos
   useEffect(() => {
     if (!rutaGastosFijos) return;
     const q = query(collection(db, rutaGastosFijos));
-    const unsub = onSnapshot(q, (snap) => {
-      setGastosFijos(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setGastosFijos(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("gastos_fijos")
+    );
     return () => unsub();
   }, [rutaGastosFijos]);
 
-  // Conductores
+  // 10. Conductores
   useEffect(() => {
     if (!rutaConductores) return;
     const q = query(collection(db, rutaConductores));
-    const unsub = onSnapshot(q, (snap) => {
-      setConductores(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setConductores(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("conductores")
+    );
     return () => unsub();
   }, [rutaConductores]);
 
-  // Cuenta de cobro
+  // 11. Cuentas de Cobro
   useEffect(() => {
-  if (!rutaCuentas) return;
-  const q = query(collection(db, rutaCuentas), orderBy("fecha", "desc"));
-  const unsub = onSnapshot(q, (snap) => {
-    setCuentasCobro(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
-  });
-  return () => unsub();
-}, [rutaCuentas]);
+    if (!rutaCuentas) return;
+    const q = query(collection(db, rutaCuentas), orderBy("fecha", "desc"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setCuentasCobro(snap.docs.map((d) => ({ firestoreId: d.id, ...d.data() })));
+      },
+      manejarErrorSnapshot("cuentas_cobro")
+    );
+    return () => unsub();
+  }, [rutaCuentas]);
 
-  // ── CRUD ──
+  // ── OPERACIONES CRUD (Con serverTimestamp y validación) ──
 
+  // Vehículos
   const agregarVehiculo = async (datos) => {
-    await addDoc(collection(db, rutaVehiculos), { ...datos, creadoEn: new Date().toISOString() });
+    const datosLimpios = JSON.parse(JSON.stringify(datos));
+    await addDoc(collection(db, rutaVehiculos), {
+      ...datosLimpios,
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
+    });
   };
+
   const eliminarVehiculo = async (firestoreId) => {
     await deleteDoc(doc(db, rutaVehiculos, firestoreId));
   };
+
   const editarVehiculo = async (firestoreId, datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
-    await updateDoc(doc(db, rutaVehiculos, firestoreId), datosLimpios);
+    await updateDoc(doc(db, rutaVehiculos, firestoreId), {
+      ...datosLimpios,
+      actualizadoEn: serverTimestamp(),
+    });
   };
 
-  const agregarViaje = async (datos) => {
-    await addDoc(collection(db, rutaViajes), { ...datos, creadoEn: new Date().toISOString() });
+  // Incremento atómico de Odómetro (FE-45)
+  const incrementarOdometro = async (vehiculoFirestoreId, kmAdicionales) => {
+    const kmNum = Number(kmAdicionales) || 0;
+    if (!vehiculoFirestoreId || kmNum <= 0) return;
+    await updateDoc(doc(db, rutaVehiculos, vehiculoFirestoreId), {
+      kmOdometro: increment(kmNum),
+      actualizadoEn: serverTimestamp(),
+    });
   };
+
+  // Viajes
+  const agregarViaje = async (datos, vehiculoFirestoreId = null) => {
+    const datosLimpios = JSON.parse(JSON.stringify(datos));
+    const docRef = await addDoc(collection(db, rutaViajes), {
+      ...datosLimpios,
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
+    });
+
+    // Si viene asociado a un vehículo y tiene kilometraje, incrementar odómetro atómicamente (FE-45)
+    if (vehiculoFirestoreId && datosLimpios.kmT > 0) {
+      try {
+        await incrementarOdometro(vehiculoFirestoreId, datosLimpios.kmT);
+      } catch (e) {
+        console.warn("No se pudo actualizar odómetro automáticamente:", e);
+      }
+    }
+    return docRef;
+  };
+
   const eliminarViaje = async (firestoreId) => {
     await deleteDoc(doc(db, rutaViajes, firestoreId));
   };
+
   const editarViaje = async (firestoreId, datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
-    await updateDoc(doc(db, rutaViajes, firestoreId), datosLimpios);
+    await updateDoc(doc(db, rutaViajes, firestoreId), {
+      ...datosLimpios,
+      actualizadoEn: serverTimestamp(),
+    });
   };
 
+  // Empresas
   const agregarEmpresa = async (datos) => {
-    await addDoc(collection(db, rutaEmpresas), { ...datos, creadoEn: new Date().toISOString() });
+    const datosLimpios = JSON.parse(JSON.stringify(datos));
+    await addDoc(collection(db, rutaEmpresas), {
+      ...datosLimpios,
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
+    });
   };
+
   const eliminarEmpresa = async (firestoreId) => {
     await deleteDoc(doc(db, rutaEmpresas, firestoreId));
   };
 
+  // Rutas
   let guardandoRuta = false;
   const agregarRuta = async (datos) => {
     if (guardandoRuta) return;
     guardandoRuta = true;
-    if (!uid) throw new Error("Sin uid");
-    const datosLimpios = JSON.parse(JSON.stringify(datos));
-    await addDoc(collection(db, `usuarios/${uid}/rutas`), {
-      ...datosLimpios,
-      creadoEn: new Date().toISOString(),
-    });
-    guardandoRuta = false;
+    try {
+      if (!uid) throw new Error("Sin uid");
+      const datosLimpios = JSON.parse(JSON.stringify(datos));
+      await addDoc(collection(db, `usuarios/${uid}/rutas`), {
+        ...datosLimpios,
+        creadoEn: serverTimestamp(),
+        actualizadoEn: serverTimestamp(),
+      });
+    } finally {
+      guardandoRuta = false;
+    }
   };
+
   const eliminarRuta = async (firestoreId) => {
     await deleteDoc(doc(db, rutaRutas, firestoreId));
   };
 
+  // Mantenimiento
   const agregarMantenimiento = async (datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
     await addDoc(collection(db, rutaMant), {
       ...datosLimpios,
-      creadoEn: new Date().toISOString(),
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
     });
   };
+
   const eliminarMantenimiento = async (firestoreId) => {
     await deleteDoc(doc(db, rutaMant, firestoreId));
   };
 
+  // Config Mantenimiento
   const agregarConfigMant = async (datos) => {
+    const datosLimpios = JSON.parse(JSON.stringify(datos));
     await addDoc(collection(db, rutaConfigMant), {
-      ...datos,
-      creadoEn: new Date().toISOString(),
+      ...datosLimpios,
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
     });
   };
+
   const eliminarConfigMant = async (firestoreId) => {
     await deleteDoc(doc(db, rutaConfigMant, firestoreId));
   };
 
+  // Gastos
   const agregarGasto = async (datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
-    await addDoc(collection(db, rutaGastos), { ...datosLimpios, creadoEn: new Date().toISOString() });
+    await addDoc(collection(db, rutaGastos), {
+      ...datosLimpios,
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
+    });
   };
+
   const eliminarGasto = async (firestoreId) => {
     await deleteDoc(doc(db, rutaGastos, firestoreId));
   };
+
   const editarGasto = async (firestoreId, datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
-    await updateDoc(doc(db, rutaGastos, firestoreId), datosLimpios);
+    await updateDoc(doc(db, rutaGastos, firestoreId), {
+      ...datosLimpios,
+      actualizadoEn: serverTimestamp(),
+    });
   };
 
+  // Gastos Fijos
   const agregarGastoFijo = async (datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
-    await addDoc(collection(db, rutaGastosFijos), { ...datosLimpios, creadoEn: new Date().toISOString() });
+    await addDoc(collection(db, rutaGastosFijos), {
+      ...datosLimpios,
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
+    });
   };
+
   const eliminarGastoFijo = async (firestoreId) => {
     await deleteDoc(doc(db, rutaGastosFijos, firestoreId));
   };
 
-  // Conductores CRUD
+  // Conductores
   const agregarConductor = async (datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
-    await addDoc(collection(db, rutaConductores), { ...datosLimpios, creadoEn: new Date().toISOString() });
+    await addDoc(collection(db, rutaConductores), {
+      ...datosLimpios,
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
+    });
   };
+
   const editarConductor = async (firestoreId, datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
-    await updateDoc(doc(db, rutaConductores, firestoreId), datosLimpios);
+    await updateDoc(doc(db, rutaConductores, firestoreId), {
+      ...datosLimpios,
+      actualizadoEn: serverTimestamp(),
+    });
   };
+
   const eliminarConductor = async (firestoreId) => {
     await deleteDoc(doc(db, rutaConductores, firestoreId));
   };
 
-  // Cuenta de cobro CRUD
+  // Cuentas de Cobro
   const agregarCuenta = async (datos) => {
-  const datosLimpios = JSON.parse(JSON.stringify(datos));
-  await addDoc(collection(db, rutaCuentas), { ...datosLimpios, creadoEn: new Date().toISOString() });
-};
-const editarCuenta = async (firestoreId, datos) => {
-  const datosLimpios = JSON.parse(JSON.stringify(datos));
-  await updateDoc(doc(db, rutaCuentas, firestoreId), datosLimpios);
-};
+    const datosLimpios = JSON.parse(JSON.stringify(datos));
+    await addDoc(collection(db, rutaCuentas), {
+      ...datosLimpios,
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
+    });
+  };
 
-const eliminarCuenta = async (firestoreId) => {
-  await deleteDoc(doc(db, rutaCuentas, firestoreId));
-};
+  const editarCuenta = async (firestoreId, datos) => {
+    const datosLimpios = JSON.parse(JSON.stringify(datos));
+    await updateDoc(doc(db, rutaCuentas, firestoreId), {
+      ...datosLimpios,
+      actualizadoEn: serverTimestamp(),
+    });
+  };
+
+  const eliminarCuenta = async (firestoreId) => {
+    await deleteDoc(doc(db, rutaCuentas, firestoreId));
+  };
 
   return {
-    vehiculos, viajes, empresas, rutas, mantenimientos, conductores, configMant, peajes, gastosVehiculo, gastosFijos, cargando, cuentasCobro,
-    agregarVehiculo, eliminarVehiculo, editarVehiculo,
+    vehiculos, viajes, empresas, rutas, mantenimientos, conductores,
+    configMant, peajes, gastosVehiculo, gastosFijos, cargando, cuentasCobro,
+    agregarVehiculo, eliminarVehiculo, editarVehiculo, incrementarOdometro,
     agregarViaje,    eliminarViaje,    editarViaje,
     agregarEmpresa,  eliminarEmpresa,
     agregarRuta,     eliminarRuta,
@@ -279,3 +443,5 @@ const eliminarCuenta = async (firestoreId) => {
     agregarCuenta, editarCuenta, eliminarCuenta,
   };
 }
+
+export default useFirestore;
