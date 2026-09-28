@@ -913,6 +913,26 @@ exports.botNavira = onRequest(
       return res.status(403).send("Forbidden");
     }
     const update = req.body;
+
+    // ── Idempotencia: evitar procesar dos veces el mismo update de Telegram ──
+    if (update && update.update_id) {
+      const updateRef = db.doc(`telegram_updates/${update.update_id}`);
+      try {
+        const expiraEn = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 horas (ventana máxima de reintentos)
+        await updateRef.create({
+          procesadoEn: new Date().toISOString(),
+          chatId: update.message?.chat?.id || null,
+          expiraEn,
+        });
+      } catch (errIdem) {
+        if (errIdem.code === 6 || errIdem.message?.includes("ALREADY_EXISTS")) {
+          console.warn(`[Idempotencia] Update ${update.update_id} ya procesado. Ignorando duplicado.`);
+          return res.status(200).send("OK");
+        }
+        console.error("Error al registrar update_id:", errIdem);
+      }
+    }
+
     if (update && update.message && update.message.text) {
       await procesarMensaje(update.message.chat.id, update.message.text);
     }
