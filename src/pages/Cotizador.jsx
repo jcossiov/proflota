@@ -23,9 +23,9 @@ import {
 
 const fmt = (n) => "$" + Math.round(n || 0).toLocaleString("es-CO");
 
-// Parser numérico colombiano: distingue decimal de miles
+// Parser numérico colombiano: distingue decimal de miles y remueve signos $
 const num = (v) => {
-  let t = String(v).trim().replace(/\s/g, "");
+  let t = String(v ?? "").trim().replace(/[\$\s]/g, "");
   if (!t) return 0;
   if (t.includes(",")) {
     const n = parseFloat(t.replace(/\./g, "").replace(",", "."));
