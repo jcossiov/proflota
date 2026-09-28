@@ -6,6 +6,8 @@
 
 const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { PEAJES_CO } = require("./data/peajesData");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
@@ -1174,3 +1176,82 @@ exports.validarAltaUsuario = onCall(
     };
   }
 );
+
+// ── BE-07: Ingesta Programada y Segura de Peajes ─────────────────────────────
+
+async function sincronizarCatalogoPeajes(dbInstance = db) {
+  const batchSize = 400;
+  let actualizados = 0;
+
+  for (let i = 0; i < PEAJES_CO.length; i += batchSize) {
+    const chunk = PEAJES_CO.slice(i, i + batchSize);
+    const batch = dbInstance.batch();
+
+    for (const peaje of chunk) {
+      const docRef = dbInstance.collection("peajes").doc(peaje.c);
+      batch.set(
+        docRef,
+        {
+          ...peaje,
+          actualizadoEn: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      actualizados++;
+    }
+
+    await batch.commit();
+  }
+
+  return {
+    total: PEAJES_CO.length,
+    actualizados,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+/**
+ * BE-07 / CR-06: Tarea programada mensual para sincronizar el catálogo de peajes
+ * Se ejecuta automáticamente el 1 de cada mes a las 3:00 AM (COT).
+ */
+exports.ingestarPeajesProgramada = onSchedule(
+  {
+    schedule: "0 3 1 * *",
+    timeZone: "America/Bogota",
+    memory: "256MiB",
+    timeoutSeconds: 120,
+  },
+  async (event) => {
+    console.log("[ingestarPeajesProgramada] Ejecutando sincronización automática de tarifas de peajes...");
+    const resultado = await sincronizarCatalogoPeajes();
+    console.log(`[ingestarPeajesProgramada] Éxito: ${resultado.actualizados} peajes actualizados.`);
+    return resultado;
+  }
+);
+
+/**
+ * BE-07: Endpoint Callable para ingesta o resincronización bajo demanda
+ * Requiere usuario autenticado. Reemplaza la escritura directa insegura del cliente.
+ */
+exports.ingestarPeajes = onCall(
+  {
+    cors: true,
+    memory: "256MiB",
+    timeoutSeconds: 120,
+  },
+  async (request) => {
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError("unauthenticated", "Debe iniciar sesión para ejecutar la sincronización de peajes.");
+    }
+
+    console.log(`[ingestarPeajes] Ingesta bajo demanda solicitada por UID: ${request.auth.uid}`);
+    const resultado = await sincronizarCatalogoPeajes();
+    return {
+      status: "OK",
+      mensaje: `Catálogo de ${resultado.actualizados} peajes sincronizado correctamente vía Admin SDK.`,
+      ...resultado,
+    };
+  }
+);
+
+exports.sincronizarCatalogoPeajes = sincronizarCatalogoPeajes;
