@@ -1,3 +1,7 @@
+/**
+ * Hecho por JESUS COSSIO DEV
+ * Optimizaciones de arquitectura, accesibilidad y experiencia de usuario
+ */
 import { useNavigate, useLocation } from "react-router-dom";
 import { Home, Truck, Calculator, TrendingUp } from "lucide-react";
 import { theme as t } from "../styles/theme";

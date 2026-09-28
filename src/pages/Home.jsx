@@ -1,3 +1,7 @@
+/**
+ * Hecho por JESUS COSSIO DEV
+ * Optimizaciones de arquitectura, accesibilidad y experiencia de usuario
+ */
 import { useNavigate } from "react-router-dom";
 import { useAuth }     from "../hooks/useAuth";
 import { theme as t }  from "../styles/theme";
