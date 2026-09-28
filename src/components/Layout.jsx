@@ -16,12 +16,15 @@ function Layout({ children }) {
 
   return (
     <div style={styles.contenedor}>
+      <a href="#main-content" className="skip-link">
+        Saltar al contenido principal
+      </a>
 
-      <div style={styles.pantalla}>
+      <main id="main-content" style={styles.pantalla}>
         {children}
-      </div>
+      </main>
 
-      <nav style={styles.navbar}>
+      <nav style={styles.navbar} aria-label="Navegación principal">
         {tabs.map((tab) => {
           const activo = ruta === tab.path;
           return (
