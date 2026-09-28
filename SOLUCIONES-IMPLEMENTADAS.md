@@ -2,12 +2,12 @@
 
 **Repositorio:** `mcordobaruiz98/proflota.git`  
 **Rama de Desarrollo:** `Cambios-Dev-Caliche` *(Producción `main` protegida e intacta)*  
-**Fecha de Inicio:** 28 de septiembre de 2026  
+**Fecha de Actualización:** 28 de septiembre de 2026  
 **Auditor / Implementador:** Especialista en Ciberseguridad, Bases de Datos e Infraestructura Cloud (Vortex Labs)
 
 ---
 
-## Índice de Tareas Implementadas
+## Índice General de Tareas Resueltas (11 Tareas)
 
 | ID | Bloque | Severidad | Área | Título de la Solución | Commit Git | Estado Notion |
 |:---:|:---:|:---:|:---:|---|:---:|:---:|
@@ -17,66 +17,102 @@
 | **BE-28** | Bloque 8 | `P2 - Media` | Back / DB | Campo `expiraEn` con política de TTL nativo de Cloud Firestore para sesiones | `50cdaa8` | `Done` |
 | **BE-30** | Bloque 9 | `P2 - Media` | Front / Infra | Optimización de empaquetado Vite con `manualChunks` (división de vendors) | `a3d8434` | `Done` |
 | **BE-34** | Bloque 9 | `P3 - Baja` | Back / CDN | Cabeceras de cache inmutable y compresión en CDN (Vercel y Firebase Hosting) | `58c04f3` | `Done` |
+| **BE-29** | Bloque 7 | `P1 - Alta` | Back / DB | Generación atómica transaccional de consecutivos de cobro en servidor | `a6f1ea8` | `Done` |
+| **CR-20** | Bloque 7 | `P1 - Alta` | Cruces / Cobros | Emisión atómica de cuentas de cobro coordinada con transacción de Firestore | `a6f1ea8` | `Done` |
+| **BE-33** | Bloque 7 | `P1 - Alta` | Back / DB | Escrituras atómicas (`writeBatch`) en sincronización de mantenimiento y vehículo | `a6f1ea8` | `Done` |
+| **CR-17** | Bloque 7 | `P1 - Alta` | Cruces / Back | Actualización centralizada de odómetro mediante Cloud Function Trigger | `0541415` | `Done` |
+| **CR-16** | Bloque 7 | `P0 - Bloqueante` | Cruces / DB | Desacople y migración de arrays embebidos a subcolecciones (evita tope de 1 MiB) | `0541415` | `Done` |
 
 ---
 
-## Detalle Técnico de Soluciones (Bloque 6, 8 y 9)
+## Detalle Técnico de Soluciones Implementadas
 
-### 1. [BE-25] Runtime Node.js 20 LTS en Cloud Functions
-* **Problema:** `functions/package.json` declaraba `"engines": { "node": "24" }`. Google Cloud Functions para Firebase no soporta Node 24, lo que provocaba que cualquier build o despliegue fallara inmediatamente con error fatal.
+### Bloque 6, 8 y 9: Infraestructura, Estabilidad y CDN
+
+#### 1. [BE-25] Runtime Node.js 20 LTS en Cloud Functions
+* **Problema:** `functions/package.json` declaraba `"engines": { "node": "24" }`. Google Cloud Functions para Firebase no soporta Node 24, arrojando error fatal en Google Cloud Build.
 * **Archivos Modificados:** `functions/package.json`.
-* **Solución Técnica:** Se fijó a `"engines": { "node": "20" }`, versión oficial LTS soportada por Firebase Cloud Functions v2 y compatible con `firebase-admin ^13.6.0` y `firebase-functions ^7.0.0`.
+* **Solución Técnica:** Se fijó a `"engines": { "node": "20" }`, versión oficial LTS soportada por Firebase Cloud Functions v2.
 * **Commit:** `f74ca3d` | **Notion:** `Done`
 
-### 2. [BE-31] Límites de Escalado, Memoria y Timeout en `botNavira`
-* **Problema:** La función Cloud `botNavira` carecía de restricciones de escalado y recursos. En picos de tráfico de Telegram o ataques de denegación de servicio, podía escalar cientos de contenedores desbordando la facturación en Google Cloud.
+#### 2. [BE-31] Límites de Escalado, Memoria y Timeout en `botNavira`
+* **Problema:** La función `botNavira` no tenía límites de concurrencia. Podía escalar cientos de contenedores desbordando costos en GCP ante picos o ataques.
 * **Archivos Modificados:** `functions/index.js`.
-* **Solución Técnica:** Se especificaron parámetros defensivos en `onRequest`:
-  * `maxInstances: 10`: Techo máximo de concurrencia de contenedores.
-  * `memory: "256MiB"`: Memoria ajustada al consumo real del parser de texto.
-  * `timeoutSeconds: 30`: Cierre forzoso de sockets colgados.
+* **Solución Técnica:** Se añadieron parámetros defensivos: `maxInstances: 10`, `memory: "256MiB"`, `timeoutSeconds: 30`.
 * **Commit:** `6678c69` | **Notion:** `Done`
 
-### 3. [BE-32] Control de Idempotencia en Webhook de Telegram
-* **Problema:** Ante latencias de red, Telegram reintenta el webhook enviando el mismo `update_id`. El bot procesaba el mensaje múltiples veces, generando viajes duplicados y fletes dobles en Firestore.
+#### 3. [BE-32] Control de Idempotencia en Webhook de Telegram
+* **Problema:** Telegram reintenta el webhook si la red fluctúa, generando viajes duplicados o fletes dobles.
 * **Archivos Modificados:** `functions/index.js`.
-* **Solución Técnica:** Se implementó una guarda atómica previa al procesamiento:
-  ```javascript
-  const updateRef = db.doc(`telegram_updates/${update.update_id}`);
-  await updateRef.create({
-    procesadoEn: new Date().toISOString(),
-    chatId: update.message?.chat?.id || null,
-    expiraEn: new Date(Date.now() + 2 * 60 * 60 * 1000)
-  });
-  ```
-  Si el documento ya existe (`err.code === 6 / ALREADY_EXISTS`), se aborta el flujo respondiendo `200 OK` de inmediato sin re-ejecutar lógica de negocio.
+* **Solución Técnica:** Guarda atómica con `db.doc("telegram_updates/${update.update_id}").create(...)`. Si ya existe (`ALREADY_EXISTS`), se responde `200 OK` de inmediato sin re-ejecutar.
 * **Commit:** `45cd505` | **Notion:** `Done`
 
-### 4. [BE-28] Política de TTL Nativo en Firestore para `telegram_sesiones`
-* **Problema:** Las sesiones conversacionales incompletas o abandonadas quedaban retenidas indefinidamente en la base de datos de producción.
+#### 4. [BE-28] Política de TTL Nativo en Firestore para `telegram_sesiones`
+* **Problema:** Sesiones incompletas quedaban retenidas indefinidamente en Firestore.
 * **Archivos Modificados:** `functions/index.js`.
-* **Solución Técnica:** Se añadió `expiraEn: new Date(Date.now() + 24 * 60 * 60 * 1000)` en `setSesion` y `resetViaje`. Con esto, la política TTL nativa de Cloud Firestore purga automáticamente documentos vencidos sin costos de Cloud Functions.
+* **Solución Técnica:** Campo `expiraEn: new Date(Date.now() + 24 * 60 * 60 * 1000)` en `setSesion` y `resetViaje` para purga automática en Cloud Firestore.
 * **Commit:** `50cdaa8` | **Notion:** `Done`
 
-### 5. [BE-30] Optimización de Empaquetado Vite con `manualChunks`
-* **Problema:** Todas las librerías externas (`firebase`, `lucide-react`, `react-router`) se empaquetaban en un solo bundle monolítico. Cualquier corrección mínima en el código forzaba al usuario móvil a volver a descargar todo el framework.
+#### 5. [BE-30] Optimización de Empaquetado Vite con `manualChunks`
+* **Problema:** Paquetes externos pesados se compilaban en un solo bundle monolítico, invalidando la caché completa en cada release.
 * **Archivos Modificados:** `vite.config.js`.
-* **Solución Técnica:** Se configuró Rollup para división inteligente de vendors en `manualChunks`:
-  * `vendor-firebase`: SDK de Firebase.
-  * `vendor-lucide`: Iconografía.
-  * `vendor-react`: React, React-DOM y React-Router.
-  * `chunkSizeWarningLimit: 650`.
+* **Solución Técnica:** División de vendors con `manualChunks`: `vendor-firebase`, `vendor-lucide`, `vendor-react`.
 * **Commit:** `a3d8434` | **Notion:** `Done`
 
-### 6. [BE-34] Cabeceras de Cache Inmutable y Compresión en CDN
-* **Problema:** `vercel.json` forzaba `no-cache, no-store, must-revalidate` en `/assets/(.*)`, destruyendo la caché del navegador para archivos versionados por hash.
+#### 6. [BE-34] Cabeceras de Cache Inmutable y Compresión en CDN
+* **Problema:** `vercel.json` forzaba `no-cache, no-store` en assets versionados por hash.
 * **Archivos Modificados:** `vercel.json`, `firebase.json`.
-* **Solución Técnica:**
-  * `/assets/**`: `Cache-Control: public, max-age=31536000, immutable`.
-  * Fuentes tipográficas y SVGs: `Cache-Control: public, max-age=604800, stale-while-revalidate=86400`.
-  * `/index.html`: `no-cache, must-revalidate` para forzar refresco inmediato del punto de entrada ante nuevos releases.
+* **Solución Técnica:** `/assets/**` con `Cache-Control: public, max-age=31536000, immutable`; revalidación estricta solo para `/index.html`.
 * **Commit:** `58c04f3` | **Notion:** `Done`
 
 ---
 
-*(Este documento se actualizará continuamente a medida que se completen las tareas del Bloque 7 de Integridad de Base de Datos).*
+### Bloque 7: Integridad de Base de Datos y Finanzas
+
+#### 7. [BE-29] y [CR-20] Consecutivos Atómicos Transaccionales de Cuentas de Cobro
+* **Problema:** En `Cobros.jsx`, el número de factura se calculaba en memoria con `cuentasCobro.reduce(...) + 1`. Dos despachadores facturando al tiempo recibían el mismo número de factura (colisión contable y fiscal).
+* **Archivos Modificados:** `src/hooks/useFirestore.js`, `src/pages/Cobros.jsx`.
+* **Solución Técnica:**
+  * Se implementó `agregarCuenta` usando `runTransaction(db, ...)`.
+  * La transacción lee atómicamente el documento `usuarios/{uid}/config_contable/consecutivos`, incrementa `ultimoCobro`, guarda la nueva cuenta en `cuentas_cobro` y garantiza unicidad absoluta serializada en servidor.
+  * `Cobros.jsx` captura el número oficial devuelto por la transacción sin suposiciones locales.
+* **Commit:** `a6f1ea8` | **Notion:** `Done`
+
+#### 8. [BE-33] Escrituras Atómicas (`writeBatch`) en Mantenimiento y Vehículo
+* **Problema:** En `Aceite.jsx` y `Llantas.jsx`, el registro de mantenimiento y la actualización del estado del vehículo se realizaban mediante dos escrituras independientes no transaccionales con `.catch(()=>{})`. Si la red caía entre ambas, la base de datos quedaba permanentemente desincronizada.
+* **Archivos Modificados:** `src/hooks/useFirestore.js`, `src/App.jsx`, `src/pages/mantenimiento/Aceite.jsx`, `src/pages/mantenimiento/Llantas.jsx`.
+* **Solución Técnica:**
+  * Se implementó `registrarMantenimientoConVehiculo` usando `writeBatch(db)`.
+  * Inserta el registro de mantenimiento y actualiza el estado del vehículo en un **único commit atómico**. Si uno falla, ambos se revierten.
+* **Commit:** `a6f1ea8` | **Notion:** `Done`
+
+#### 9. [CR-17] Actualización Centralizada del Odómetro con Trigger Cloud Function
+* **Problema:** En `DetalleViaje.jsx`, el kilometraje del vehículo se sumaba/restaba leyendo el dato en cliente y haciendo `updateDoc`. Esto generaba pérdida de kilometraje acumulado por condiciones de carrera entre usuarios o con el bot de Telegram.
+* **Archivos Modificados:** `functions/index.js`.
+* **Solución Técnica:**
+  * Se creó el trigger `exports.actualizarOdometroViaje = onDocumentWritten("usuarios/{uid}/viajes/{viajeId}", ...)`.
+  * Calcula automáticamente el delta de kilómetros:
+    * Creación de viaje: suma `kmT`.
+    * Eliminación de viaje: resta `kmT`.
+    * Edición de viaje: aplica la diferencia `kmNuevo - kmAnterior`.
+  * Aplica `FieldValue.increment(deltaKm)` en el documento del vehículo de forma atómica en Google Cloud, desacoplando totalmente al cliente.
+* **Commit:** `0541415` | **Notion:** `Done`
+
+#### 10. [CR-16] Migración de Arrays Embebidos hacia Subcolecciones
+* **Problema:** Los documentos de vehículos (`usuarios/{uid}/vehiculos/{id}`) almacenaban `tanqueosHistorial`, `aceiteHistorial` y `llantasData` como arrays directos. Con meses de operación, el documento se inflaba aproximándose al límite duro de **1 MiB de Firestore**, elevando la latencia y costo de lecturas.
+* **Archivos Modificados:** `src/scripts/migrarHistorialesVehiculos.js`.
+* **Solución Técnica:**
+  * Se creó el motor de migración `migrarHistorialesDeVehiculos(uid)` que traslada los registros hacia subcolecciones dedicadas:
+    * `vehiculos/{id}/tanqueos/{tanqueoId}`
+    * `vehiculos/{id}/aceite/{aceiteId}`
+    * `vehiculos/{id}/llantas/{posicion}`
+  * Limpia los campos pesados del documento padre mediante `deleteField()`, manteniendo resúmenes livianos para listados ultra-rápidos.
+* **Commit:** `0541415` | **Notion:** `Done`
+
+---
+
+### Verificación de Repositorio
+* **Rama de trabajo:** `Cambios-Dev-Caliche`
+* **Rama de producción:** `main` (intacta, 0 commits fusionados)
+* **Verificación remota:** Todos los commits respaldados en GitHub:  
+  👉 https://github.com/mcordobaruiz98/proflota/tree/Cambios-Dev-Caliche
