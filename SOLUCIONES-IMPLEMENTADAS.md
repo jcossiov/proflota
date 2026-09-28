@@ -7,10 +7,12 @@
 
 ---
 
-## Índice General de Tareas Resueltas (18 Tareas)
+## Índice General de Tareas Resueltas (20 Tareas)
 
 | ID | Bloque | Severidad | Área | Título de la Solución | Commit Git | Estado Notion |
 |:---:|:---:|:---:|:---:|---|:---:|:---:|
+| **BE-27** | Bloque 8 | `P1 - Alta` | Back / Telegram Bot | Búsquedas indexadas con claves normalizadas (`placaNorm`, `rutaNorm`, `razonSocialNorm`) | `d27db99` | `Done` |
+| **BE-26** | Bloque 8 | `P1 - Alta` | Hosting / DB | Declaración y versionado de índices compuestos y TTL en `firestore.indexes.json` | `d27db99` | `Done` |
 | **CR-01** | Bloque 2 | `P1 - Alta` | Cruces / Auth | Escalonar alta de cuenta centralizada con Cloud Function (unificación Email y Google) | `cbd206b` | `Done` |
 | **BE-01** | Bloque 2 | `P1 - Alta` | Back / Auth | Cloud Function callable `validarAltaUsuario` con Admin SDK, Custom Claims y términos | `cbd206b` | `Done` |
 | **BE-03** | Bloque 2 | `P1 - Alta` | Reglas / Seguridad | Validación simétrica de esquema y límites en `update` y `create` en `firestore.rules` | `cbd206b` | `Done` |
@@ -34,60 +36,68 @@
 
 ## Detalle Técnico de Soluciones Implementadas
 
+### Bloque 8: Optimización de Red y Consultas
+
+#### 1. [BE-27] Búsquedas Indexadas por Clave Normalizada en Telegram Bot y Frontend
+* **Problema:** En `functions/index.js`, las funciones `buscarVehiculo`, `buscarMemoriaRuta` y `buscarEmpresa` descargaban colecciones enteras con `.get()` (e incluso hasta 200 viajes ordenados por fecha) e iteraban linealmente en JavaScript en cada mensaje de Telegram. Esto consumía cientos de lecturas de Firestore por interacción elevando costos y latencia.
+* **Archivos Modificados:** `functions/index.js`, `src/hooks/useFirestore.js`.
+* **Solución Técnica:**
+  * Se implementaron claves normalizadas (`placaNorm`, `rutaNorm`, `razonSocialNorm`) al guardar registros tanto desde la web como desde Telegram.
+  * Se refactorizaron las búsquedas para consultar directamente contra índices de Firestore con `.limit(1)`:
+    * `buscarVehiculo`: `.where("placaNorm", "==", placa).limit(1)`.
+    * `buscarMemoriaRuta`: consulta indexada a rutas frecuentes y viajes históricos por `rutaNorm`.
+    * `buscarEmpresa`: `.where("razonSocialNorm", "==", norm).limit(1)`.
+  * Se mantuvieron fallbacks acotados con auto-reparación en segundo plano para registros legacy. El consumo de lecturas se redujo de más de 200 a solo 1 lectura por búsqueda.
+* **Commit:** `d27db99` | **Notion:** `Done`
+
+#### 2. [BE-26] Archivo Oficial de Índices Compuestos y TTL (`firestore.indexes.json`)
+* **Problema:** `firebase.json` no declaraba archivo de índices de Firestore. Consultas compuestas indispensables (como viajes filtrados por placa/vehículo y ordenados por fecha descendente, o cartera por estado de pago) corrían el riesgo de fallar en producción con errores `FAILED_PRECONDITION` por falta de índice compuesto.
+* **Archivos Modificados:** `firestore.indexes.json`, `firebase.json`.
+* **Solución Técnica:**
+  * Se creó y versionó [`firestore.indexes.json`](file:///c:/Users/NNhel/Prueba%20de%20sitio%20Git/Navira%20Proyect/proflota/firestore.indexes.json) definiendo 10 índices compuestos esenciales para `viajes`, `cuentas_cobro`, `mantenimiento` y `gastos_vehiculo`.
+  * Se vincularon las políticas de TTL para purga automática en `telegram_sesiones` y `telegram_updates` sobre el campo `expiraEn`.
+  * Se vinculó en `firebase.json` bajo la clave `"indexes": "firestore.indexes.json"`.
+* **Commit:** `d27db99` | **Notion:** `Done`
+
+---
+
 ### Bloque 2: Eliminar Superficie de Ataque
 
-#### 1. [BE-01] y [CR-01] Cloud Function Callable para Alta Segura de Cuenta y Escalonamiento
-* **Problema:** En `useAuth.js`, el registro por correo y el flujo de Google leían directamente el documento `codigos_beta/principal` desde el cliente y comparaban el código en memoria de JavaScript. En el flujo de Google, si el código era inválido, la cuenta de usuario ya había sido creada en Firebase Auth y dependía de una llamada frágil a `deleteUser` en el cliente.
+#### 3. [BE-01] y [CR-01] Cloud Function Callable para Alta Segura de Cuenta y Escalonamiento
+* **Problema:** Validación de código beta en cliente y riesgo de cuentas huérfanas en Google Sign-In.
 * **Archivos Modificados:** `functions/index.js`, `src/firebase.js`, `src/hooks/useAuth.js`, `functions/test/auth.test.js`.
-* **Solución Técnica:**
-  * Se implementó la Cloud Function callable `exports.validarAltaUsuario = onCall(...)` en el backend.
-  * Valida obligatoriamente:
-    1. Que el usuario esté autenticado en Firebase Auth (`context.auth`).
-    2. Que haya aceptado los términos (`aceptoTerminos: true`).
-    3. Que el código de invitación coincida con el documento confidencial `codigos_beta/principal` consultado vía Admin SDK.
-  * Asigna atómicamente el Custom Claim `betaValido: true` en Firebase Auth y crea el documento en `usuarios/{uid}` con marcas de tiempo confiables (`serverTimestamp()`). Si la validación falla, purga inmediatamente al usuario no autorizado de Firebase Auth con `getAuth().deleteUser(uid)`.
-  * Se conectó `useAuth.js` mediante `httpsCallable(functions, "validarAltaUsuario")`, eliminando cualquier consulta a `codigos_beta` desde el navegador.
+* **Solución Técnica:** Cloud Function callable `validarAltaUsuario` con Admin SDK, Custom Claims y purga atómica de usuarios no autorizados.
 * **Commit:** `cbd206b` | **Notion:** `Done`
 
-#### 2. [BE-03] Validación Simétrica de Esquema y Tamaño en `Update`
-* **Problema:** Las subcolecciones de usuarios (`vehiculos`, `viajes`, `mantenimiento`, `gastos_vehiculo`, `gastos_fijos`, `cuentas_cobro`) no tenían validaciones en operaciones de edición (`update`). Un atacante con sesión podía enviar strings de 50.000 caracteres o inyectar propiedades arbitrarias inflando los documentos de Firestore.
+#### 4. [BE-03] Validación Simétrica de Esquema y Tamaño en `Update`
+* **Problema:** Subcolecciones de usuarios sin validación en operaciones de edición (`update`).
 * **Archivos Modificados:** `firestore.rules`.
-* **Solución Técnica:**
-  * Se declararon funciones auxiliares en Firestore Rules: `esStringValido`, `esStringOpcional`, `esNumeroOpcional`.
-  * Se crearon validadores estrictos por colección (`validarVehiculo`, `validarViaje`, `validarCuentaCobro`, `validarMantenimiento`, `validarGasto`, `validarEntidadGeneral`).
-  * Se aplicó la regla simétrica:
-    ```javascript
-    allow create, update: if isOwner(uid) && validar<Coleccion>(request.resource.data);
-    ```
-    Garantizando que las restricciones de campos, tipos y longitud máxima se cumplan rigurosamente tanto en altas como en modificaciones.
+* **Solución Técnica:** Validadores estrictos por colección aplicados en `allow create, update`.
 * **Commit:** `cbd206b` | **Notion:** `Done`
 
-#### 3. [BE-16] CSP en Modo Reporte y Corrección COOP en Hosting/CDN
-* **Problema:** El sitio operaba sin ninguna cabecera de Content Security Policy (CSP), exponiendo la aplicación a riesgos de XSS. Adicionalmente, el popup de login con Google arrojaba errores en consola por la política `Cross-Origin-Opener-Policy` (COOP), bloqueando el cierre limpio de la ventana de autenticación.
+#### 5. [BE-16] CSP en Modo Reporte y Corrección COOP en Hosting/CDN
+* **Problema:** Sin Content Security Policy y errores de bloqueo COOP en Google Sign-in.
 * **Archivos Modificados:** `vercel.json`, `firebase.json`.
-* **Solución Técnica:**
-  * Se configuró la cabecera `Content-Security-Policy-Report-Only` restringiendo orígenes legítimos (`'self'`, APIs de Google/Firebase, fuentes de Google, Storage de Firebase y WebSockets de Firebase).
-  * Se configuró `Cross-Origin-Opener-Policy: same-origin-allow-popups` resolviendo el bloqueo del popup de Google Sign-in.
-  * Se añadieron defensas complementarias: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`.
+* **Solución Técnica:** Cabeceras `Content-Security-Policy-Report-Only` y `Cross-Origin-Opener-Policy: same-origin-allow-popups`.
 * **Commit:** `cbd206b` | **Notion:** `Done`
 
 ---
 
 ### Bloque 1: Cerrar la Puerta (Reglas y Control de Acceso)
 
-#### 4. [BE-06] Invertir a Fail-Closed en Webhook `botNavira`
-* **Problema:** Condición fail-open permitía llamadas anónimas si `TELEGRAM_SECRET` no estaba definido, admitía peticiones cross-origin (`cors: true`) y no filtraba método HTTP.
+#### 6. [BE-06] Invertir a Fail-Closed en Webhook `botNavira`
+* **Problema:** Condición fail-open permitía llamadas anónimas si `TELEGRAM_SECRET` no estaba definido.
 * **Archivos Modificados:** `functions/index.js`.
 * **Solución Técnica:** `cors: false`, filtro estricto POST (405) y validación fail-closed con 403 Forbidden.
 * **Commit:** `71ee5d6` | **Notion:** `Done`
 
-#### 5. [BE-05] Montar Secretos en Cloud Run (`botNavira`) y Test de Despliegue
-* **Problema:** Variables de Secret Manager no montadas explícitamente en Cloud Run y lectura de token estática.
+#### 7. [BE-05] Montar Secretos en Cloud Run (`botNavira`) y Test de Despliegue
+* **Problema:** Variables de Secret Manager no montadas en Cloud Run.
 * **Archivos Modificados:** `functions/index.js`, `functions/package.json`, `functions/test/botNavira.test.js`.
 * **Solución Técnica:** `secrets: ["TELEGRAM_SECRET", "TELEGRAM_TOKEN"]`, getters dinámicos y tests unitarios.
 * **Commit:** `71ee5d6` | **Notion:** `Done`
 
-#### 6. [BE-04] `allow get` en vez de `read` para `codigos_beta`
+#### 8. [BE-04] `allow get` en vez de `read` para `codigos_beta`
 * **Problema:** `allow read` permitía enumerar la colección vía REST anónimo y extraer el código beta.
 * **Archivos Modificados:** `firestore.rules`, `firebase.json`.
 * **Solución Técnica:** `allow get: if true; allow list, write: if false;` en `firestore.rules`.
@@ -96,7 +106,7 @@
 ---
 
 ### Bloques 6, 7, 8 y 9: Infraestructura, DB, CDN y Rendimiento
-*(Ver historial completo de commits `f74ca3d`, `6678c69`, `45cd505`, `50cdaa8`, `a3d8434`, `58c04f3`, `a6f1ea8`, `0541415` con odómetro atómico, consecutivos transaccionales, writeBatch y migración de subcolecciones).*
+*(Ver historial completo de commits `f74ca3d`, `6678c69`, `45cd505`, `50cdaa8`, `a3d8434`, `58c04f3`, `a6f1ea8`, `0541415` con odómetro atómico, consecutivos transaccionales, writeBatch, TTL en sesiones y migración de subcolecciones).*
 
 ---
 
