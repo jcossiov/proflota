@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   collection, doc, onSnapshot, addDoc,
   updateDoc, deleteDoc, query, orderBy,
+  runTransaction, writeBatch, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -251,19 +252,71 @@ export function useFirestore(uid) {
     await deleteDoc(doc(db, rutaConductores, firestoreId));
   };
 
-  // Cuenta de cobro CRUD
+  // Cuenta de cobro CRUD (Transaccional - BE-29 / CR-20)
   const agregarCuenta = async (datos) => {
-  const datosLimpios = JSON.parse(JSON.stringify(datos));
-  await addDoc(collection(db, rutaCuentas), { ...datosLimpios, creadoEn: new Date().toISOString() });
-};
-const editarCuenta = async (firestoreId, datos) => {
-  const datosLimpios = JSON.parse(JSON.stringify(datos));
-  await updateDoc(doc(db, rutaCuentas, firestoreId), datosLimpios);
-};
+    if (!rutaCuentas) throw new Error("Usuario no autenticado");
+    const datosLimpios = JSON.parse(JSON.stringify(datos));
+    delete datosLimpios.numero; // El consecutivo estricto lo asigna la transacción en servidor
 
-const eliminarCuenta = async (firestoreId) => {
-  await deleteDoc(doc(db, rutaCuentas, firestoreId));
-};
+    return await runTransaction(db, async (transaction) => {
+      const configRef = doc(db, `usuarios/${uid}/config_contable`, "consecutivos");
+      const configSnap = await transaction.get(configRef);
+
+      let siguienteNumero = 1;
+      if (configSnap.exists()) {
+        siguienteNumero = (configSnap.data().ultimoCobro || 0) + 1;
+      }
+
+      const nuevaCuentaRef = doc(collection(db, rutaCuentas));
+      const cuentaFinal = {
+        ...datosLimpios,
+        numero: siguienteNumero,
+        creadoEn: new Date().toISOString(),
+        servidorTimestamp: serverTimestamp(),
+      };
+
+      transaction.set(configRef, { ultimoCobro: siguienteNumero, actualizadoEn: serverTimestamp() }, { merge: true });
+      transaction.set(nuevaCuentaRef, cuentaFinal);
+
+      return { firestoreId: nuevaCuentaRef.id, numero: siguienteNumero };
+    });
+  };
+
+  const editarCuenta = async (firestoreId, datos) => {
+    const datosLimpios = JSON.parse(JSON.stringify(datos));
+    await updateDoc(doc(db, rutaCuentas, firestoreId), {
+      ...datosLimpios,
+      actualizadoEn: serverTimestamp(),
+    });
+  };
+
+  const eliminarCuenta = async (firestoreId) => {
+    await deleteDoc(doc(db, rutaCuentas, firestoreId));
+  };
+
+  // Mantenimiento y Vehículo Atómico (writeBatch - BE-33)
+  const registrarMantenimientoConVehiculo = async (datosMant, datosVehiculoUpdate, vehiculoId) => {
+    if (!rutaMant) throw new Error("Usuario no autenticado");
+    const batch = writeBatch(db);
+
+    const nuevoMantRef = doc(collection(db, rutaMant));
+    batch.set(nuevoMantRef, {
+      ...JSON.parse(JSON.stringify(datosMant)),
+      creadoEn: new Date().toISOString(),
+      servidorTimestamp: serverTimestamp(),
+    });
+
+    if (vehiculoId && datosVehiculoUpdate && rutaVehiculos) {
+      const vehRef = doc(db, rutaVehiculos, vehiculoId);
+      batch.update(vehRef, {
+        ...JSON.parse(JSON.stringify(datosVehiculoUpdate)),
+        actualizadoEn: serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
+    return nuevoMantRef.id;
+  };
 
   return {
     vehiculos, viajes, empresas, rutas, mantenimientos, conductores, configMant, peajes, gastosVehiculo, gastosFijos, cargando, cuentasCobro,
@@ -271,7 +324,7 @@ const eliminarCuenta = async (firestoreId) => {
     agregarViaje,    eliminarViaje,    editarViaje,
     agregarEmpresa,  eliminarEmpresa,
     agregarRuta,     eliminarRuta,
-    agregarMantenimiento, eliminarMantenimiento,
+    agregarMantenimiento, eliminarMantenimiento, registrarMantenimientoConVehiculo,
     agregarConfigMant, eliminarConfigMant,
     agregarGasto, eliminarGasto, editarGasto,
     agregarGastoFijo, eliminarGastoFijo,
