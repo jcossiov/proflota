@@ -1,36 +1,41 @@
+/**
+ * Hecho por JESUS COSSIO DEV
+ * Sistema de diseño accesible (WCAG AA/AAA) optimizado para transportistas (30-70 años)
+ */
 export const theme = {
 
-  // ── COLORES ──
+  // ── COLORES (Alto contraste y legibilidad en cabina) ──
   colors: {
-    // Fondos (se mantiene tu identidad azul marino)
+    // Fondos (identidad azul marino NAVIRA)
     bgPrimary:   "#0A1A2F",  // fondo principal
     bgCard:      "#0F2340",  // cards
     bgSection:   "#081527",  // secciones secundarias / inputs sobre card
 
-    // Texto (un poco más legible sobre oscuro)
-    textPrimary:   "#F4F7FC", // títulos (blanco cálido, menos duro que #FFF)
-    textSecondary: "#9DB0C8", // labels
-    textTertiary:  "#647C99", // hints, placeholders, metadatos
+    // Texto de alto contraste
+    textPrimary:   "#F8FAFC", // títulos (blanco nítido)
+    textSecondary: "#ADC2DE", // labels legibles (>7:1 ratio)
+    textTertiary:  "#8FAECF", // hints y placeholders claros (>4.8:1 ratio)
 
     // Acciones — azul
     blue:        "#1565FF",  // azul de marca (botones sólidos)
-    blueText:    "#5AA0FF",  // azul legible para TEXTO sobre fondo oscuro
-    blueSoft:    "#122540",  // fondo azul suave (tinte oscuro)
-    blueBorder:  "#274A7D",  // borde azul suave
+    blueText:    "#60A5FA",  // azul legible para TEXTO sobre fondo oscuro
+    blueSoft:    "#132847",  // fondo azul suave (tinte oscuro)
+    blueBorder:  "#2A4E82",  // borde azul suave
     blueDark:    "#0A1A2F",  // azul oscuro para gradientes
 
     // Ganancia — el color más importante
     green:       "#22C55E",  // ganancia, éxito
+    greenDeep:   "#12A150",  // verde oscuro para gradientes (FE-34)
     greenSoft:   "#0F2C20",  // fondo verde suave (tinte oscuro)
     greenBorder: "#1E5138",  // borde verde suave
 
     // Gastos
-    red:         "#EF4444",  // gastos, pérdida, eliminar (más legible sobre oscuro)
-    redText:     "#FF7B73",  // rojo aún más legible para texto pequeño
+    red:         "#EF4444",  // gastos, pérdida, eliminar
+    redText:     "#FF7B73",  // rojo legible para texto sobre fondo oscuro
     redSoft:     "#2C1517",  // fondo rojo suave (tinte oscuro)
     redBorder:   "#5A2A2C",  // borde rojo suave
 
-    // Advertencia (unificado con el #F59E0B que ya usabas suelto en varias pantallas)
+    // Advertencia
     amber:       "#F59E0B",  // margen bajo, advertencia
     amberSoft:   "#2A2012",  // fondo amber suave (tinte oscuro)
     amberBorder: "#5A431A",  // borde amber suave
@@ -40,15 +45,15 @@ export const theme = {
     borderLight: "#193150",  // borde muy suave (hairline visible)
   },
 
-  // ── TIPOGRAFÍA ──
+  // ── TIPOGRAFÍA ERGONÓMICA (Legible para rango 30–70 años) ──
   fonts: {
-    sizeXs:   "11px",
-    sizeSm:   "13px",
-    sizeMd:   "15px",
+    sizeXs:   "12px",
+    sizeSm:   "14px",
+    sizeMd:   "16px",
     sizeLg:   "18px",
     sizeXl:   "22px",
     size2xl:  "28px",
-    size3xl:  "36px",
+    size3xl:  "34px",
 
     weightNormal:  "400",
     weightMedium:  "500",

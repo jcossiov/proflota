@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, FileText, Check, Eye, Share2, Trash2 } from "lucide-react";
 import { theme as t } from "../styles/theme";
 import EstadoVacio from "../components/EstadoVacio";
+import { ConfirmarModal } from "../components/ConfirmarModal";
 
 const fmt = (n) => "$" + Math.round(n || 0).toLocaleString("es-CO");
 
@@ -62,6 +63,7 @@ function Cobros({ viajes = [], empresas = [], perfilFacturacion = {}, onGuardarC
   const [viajesSel, setViajesSel] = useState([]);
   const [concepto, setConcepto] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [cuentaAEliminar, setCuentaAEliminar] = useState(null);
 
   // Viajes pendientes agrupados por empresa
   const pendientesPorEmpresa = useMemo(() => {
@@ -510,13 +512,7 @@ ${p.banco ? `<p class="banco">Favor consignar a la cuenta <strong>${p.banco} - $
                   type="button"
                   aria-label={`Eliminar cuenta N° ${String(c.numero).padStart(3, "0")}`}
                   style={{...styles.btnAccion, background:t.colors.redSoft, borderColor:t.colors.redBorder, color:t.colors.red}}
-                  onClick={async () => {
-                    if (!window.confirm(`¿Eliminar la cuenta N° ${String(c.numero).padStart(3,"0")}?`)) return;
-                    try {
-                      await onEliminarCuenta(c.firestoreId);
-                      mostrarToast("Cuenta eliminada", "info");
-                    } catch(err) { mostrarToast("Error al eliminar", "error"); }
-                  }}
+                  onClick={() => setCuentaAEliminar(c)}
                 >
                   <Trash2 size={14} strokeWidth={2} />
                 </button>
@@ -525,6 +521,27 @@ ${p.banco ? `<p class="banco">Favor consignar a la cuenta <strong>${p.banco} - $
           ))
         )}
       </div>
+
+      <ConfirmarModal
+        abierto={Boolean(cuentaAEliminar)}
+        titulo="¿Eliminar cuenta de cobro?"
+        mensaje={cuentaAEliminar ? `Estás a punto de eliminar la cuenta N° ${String(cuentaAEliminar.numero).padStart(3, "0")}. Esta acción no se puede deshacer.` : ""}
+        textoConfirmar="Sí, eliminar"
+        textoCancelar="Cancelar"
+        esPeligro={true}
+        onCancelar={() => setCuentaAEliminar(null)}
+        onConfirmar={async () => {
+          if (!cuentaAEliminar) return;
+          const id = cuentaAEliminar.firestoreId;
+          setCuentaAEliminar(null);
+          try {
+            await onEliminarCuenta(id);
+            mostrarToast("Cuenta eliminada", "info");
+          } catch(err) {
+            mostrarToast("Error al eliminar", "error");
+          }
+        }}
+      />
     </div>
   );
 }

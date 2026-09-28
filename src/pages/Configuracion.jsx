@@ -11,6 +11,7 @@ import { doc, setDoc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { theme as t } from "../styles/theme";
 import FirmaCanvas from "../components/FirmaCanvas";
+import { ConfirmarModal } from "../components/ConfirmarModal";
 
 function Configuracion({mostrarToast}) {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ function Configuracion({mostrarToast}) {
   const [eliminando, setEliminando] = useState(false);
   const [codigoTelegram, setCodigoTelegram] = useState(null);
   const [generandoCodigo, setGenerandoCodigo] = useState(false);
+  const [modalLimpiarCache, setModalLimpiarCache] = useState(false);
   const [perfilFact, setPerfilFact] = useState({
     nombreCompleto: "", tipoDoc: "CC", numeroDoc: "",
     direccion: "", ciudad: "", telefono: "", correo: "",
@@ -462,12 +464,7 @@ function Configuracion({mostrarToast}) {
       <div style={styles.seccion}>
         <button
           style={{ ...styles.filaBtn, borderBottom: "none" }}
-          onClick={() => {
-            if (window.confirm("¿Estás seguro? Esto no se puede deshacer.")) {
-              localStorage.clear();
-              window.location.reload();
-            }
-          }}
+          onClick={() => setModalLimpiarCache(true)}
         >
           <div style={styles.filaIzq}>
             <span style={styles.filaIcono}><Trash2 size={18} color={t.colors.redText} strokeWidth={2}/></span>
@@ -530,6 +527,21 @@ function Configuracion({mostrarToast}) {
           </div>
         )}
       </div>
+
+      <ConfirmarModal
+        abierto={modalLimpiarCache}
+        titulo="¿Limpiar caché local?"
+        mensaje="Se eliminarán los datos temporales del dispositivo. Esta acción no se puede deshacer."
+        textoConfirmar="Sí, limpiar"
+        textoCancelar="Cancelar"
+        esPeligro={true}
+        onCancelar={() => setModalLimpiarCache(false)}
+        onConfirmar={() => {
+          setModalLimpiarCache(false);
+          localStorage.clear();
+          window.location.reload();
+        }}
+      />
     </div>
   );
 }

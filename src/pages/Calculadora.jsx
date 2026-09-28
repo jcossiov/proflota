@@ -1,12 +1,15 @@
 /**
  * Hecho por JESUS COSSIO DEV
  * Optimizaciones de arquitectura, accesibilidad y experiencia de usuario
+ * FE-08: Borrador persistente + beforeunload | FE-41: Targets táctiles | FE-44: Tuteo guiado
  */
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Save, Plus, X, ChevronDown, ChevronUp, MapPin, Lightbulb, AlertTriangle, Check } from "lucide-react";
+import { ArrowLeft, Save, Plus, X, ChevronDown, ChevronUp, MapPin, Lightbulb, AlertTriangle, Check, ChevronRight, ChevronLeft, Zap } from "lucide-react";
 import { theme as t } from "../styles/theme";
 import { sanitizar, validarNumero } from "../utils/validar";
+
+const BORRADOR_KEY = "navira_borrador_calculadora";
 
 const DEFAULT_ADBLUE = 0.18925;
 
@@ -106,6 +109,11 @@ function Calculadora({ vehiculos, viajes, rutas = [], peajes = [], conductores =
   const [secPeajes,        setSecPeajes]          = useState(false);
   const [secCostos,        setSecCostos]          = useState(false);
   const [secDesc,          setSecDesc]            = useState(false);
+
+  // ── WIZARD (FE-08 / FE-41 / FE-44) ──────────────────────────────────────────
+  const [modoGuiado,       setModoGuiado]         = useState(true);
+  const [pasoActual,       setPasoActual]         = useState(1);
+  const borradorGuardadoRef = useRef(false);
 
 
   const n   = (v) => parseFloat(v) || 0;
@@ -405,6 +413,10 @@ function Calculadora({ vehiculos, viajes, rutas = [], peajes = [], conductores =
       setPeajesRuta([]); setRutaCargada(null);
       setPctAnticipoFlete("60"); setMontoAnticipoFlete("");
       setPctAnticipoFleteRet("60"); setMontoAnticipoFleteRet("");
+      // FE-08: Limpiar borrador al guardar exitosamente
+      try { localStorage.removeItem(BORRADOR_KEY); } catch(_) {}
+      borradorGuardadoRef.current = false;
+      if (modoGuiado) setPasoActual(1);
 
       // Navegación de retorno
       if (location.state?.vehiculoId) {
@@ -540,6 +552,80 @@ const guardarRutaFrecuente = async () => {
     if (veh.rendVacioDef > 0 && !rendVacio) setRendVacio(String(veh.rendVacioDef));
   }, [placa]);
 
+  // ── FE-08: Cargar borrador al montar ─────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(BORRADOR_KEY);
+      if (!raw) return;
+      const b = JSON.parse(raw);
+      if (b.fecha)             setFecha(b.fecha);
+      if (b.placa)             setPlaca(b.placa);
+      if (b.tipoCarga)         setTipoCarga(b.tipoCarga);
+      if (b.ruta)              setRuta(b.ruta);
+      if (b.empresa)           setEmpresa(b.empresa);
+      if (b.nitEmpresa)        setNitEmpresa(b.nitEmpresa);
+      if (b.conductor)         setConductor(b.conductor);
+      if (b.producto)          setProducto(b.producto);
+      if (b.tonelaje)          setTonelaje(b.tonelaje);
+      if (b.fleteTon)          setFleteTon(b.fleteTon);
+      if (b.modoFlete)         setModoFlete(b.modoFlete);
+      if (b.kmCargado)         setKmCargado(b.kmCargado);
+      if (b.kmVacio)           setKmVacio(b.kmVacio);
+      if (b.rendCargado)       setRendCargado(b.rendCargado);
+      if (b.rendVacio)         setRendVacio(b.rendVacio);
+      if (b.precioAcpm)        setPrecioAcpm(b.precioAcpm);
+      if (b.precioAdblue)      setPrecioAdblue(b.precioAdblue);
+      if (b.categoria)         setCategoria(b.categoria);
+      if (b.porcCond)          setPorcCond(b.porcCond);
+      if (b.carpado)           setCarpado(b.carpado);
+      if (b.gastosViaje)       setGastosViaje(b.gastosViaje);
+      borradorGuardadoRef.current = true;
+    } catch (_) {}
+  }, []);
+
+  // ── FE-08: Guardar borrador con debounce 800ms ────────────────────────────────
+  const guardarBorradorRef = useRef(null);
+  useEffect(() => {
+    if (!borradorGuardadoRef.current && !ruta && !placa && !tonelaje) return; // no guardar vacío al inicio
+    clearTimeout(guardarBorradorRef.current);
+    guardarBorradorRef.current = setTimeout(() => {
+      try {
+        const borrador = {
+          fecha, placa, tipoCarga, ruta, empresa, nitEmpresa,
+          conductor, producto, tonelaje, fleteTon, modoFlete,
+          kmCargado, kmVacio, rendCargado, rendVacio,
+          precioAcpm, precioAdblue, categoria, porcCond, carpado, gastosViaje,
+        };
+        localStorage.setItem(BORRADOR_KEY, JSON.stringify(borrador));
+        borradorGuardadoRef.current = true;
+      } catch (_) {}
+    }, 800);
+    return () => clearTimeout(guardarBorradorRef.current);
+  }, [fecha, placa, tipoCarga, ruta, empresa, nitEmpresa, conductor, producto,
+      tonelaje, fleteTon, modoFlete, kmCargado, kmVacio, rendCargado, rendVacio,
+      precioAcpm, precioAdblue, categoria, porcCond, carpado, gastosViaje]);
+
+  // ── FE-08: beforeunload listener ──────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      if (ruta || placa || tonelaje) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [ruta, placa, tonelaje]);
+
+  // ── WIZARD: banners por paso ──────────────────────────────────────────────────
+  const WIZARD_PASOS = [
+    { num: 1, icono: "🚛", titulo: "¿Quién viaja?",         banner: "¡Comencemos! Elige el camión y el conductor para este viaje." },
+    { num: 2, icono: "📍", titulo: "¿A dónde y qué llevan?", banner: "¡Excelente! Ahora dinos la ruta, la empresa y la carga." },
+    { num: 3, icono: "⛽", titulo: "Flete y Combustible",    banner: "¡Vas muy bien, ya casi acabamos! Ingresa el flete y el combustible." },
+    { num: 4, icono: "🛣️", titulo: "Peajes y Ganancia",     banner: "¡Último paso! Revisa los peajes y gastos para ver tu ganancia neta." },
+  ];
+  const pasoInfo = WIZARD_PASOS[pasoActual - 1] || WIZARD_PASOS[0];
+
   // Encabezado de sección con paso numerado (solo presentación)
   const SeccionHeader = ({ num, ok, label, abierta, onToggle }) => (
     <button
@@ -568,9 +654,70 @@ const guardarRutaFrecuente = async () => {
           <span>Volver</span>
         </button>
         <h1 style={styles.titulo}>Calculadora</h1>
+        <button
+          type="button"
+          aria-label={modoGuiado ? "Cambiar a modo avanzado" : "Cambiar a modo guiado"}
+          onClick={() => setModoGuiado(!modoGuiado)}
+          style={{
+            display:"flex", alignItems:"center", gap:"5px",
+            background: modoGuiado ? t.colors.blueSoft : t.colors.bgSection,
+            border: `1.5px solid ${modoGuiado ? t.colors.blueBorder : t.colors.border}`,
+            borderRadius: t.radius.full,
+            padding:"5px 10px",
+            fontSize:"11px", fontWeight: t.fonts.weightBold,
+            color: modoGuiado ? t.colors.blueText : t.colors.textSecondary,
+            cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
+          }}
+        >
+          <Zap size={12} strokeWidth={2.5} />
+          {modoGuiado ? "Guiado" : "Avanzado"}
+        </button>
       </div>
 
-      {/* ── RUTAS FRECUENTES ── */}
+      {/* ── WIZARD: barra de progreso y banner ── */}
+      {modoGuiado && (
+        <div style={{ padding:"12px 16px 0" }}>
+          {/* Barra de pasos */}
+          <div style={{ display:"flex", gap:"6px", marginBottom:"10px" }}>
+            {WIZARD_PASOS.map((p) => (
+              <button
+                key={p.num}
+                type="button"
+                aria-label={`Ir al paso ${p.num}: ${p.titulo}`}
+                aria-current={pasoActual === p.num ? "step" : undefined}
+                onClick={() => setPasoActual(p.num)}
+                style={{
+                  flex:1, height:"4px", border:"none", borderRadius:"2px",
+                  cursor:"pointer", padding:0,
+                  background: pasoActual >= p.num ? t.colors.blue : t.colors.bgSection,
+                  transition:"background 0.3s",
+                }}
+              />
+            ))}
+          </div>
+          {/* Banner motivacional */}
+          <div style={{
+            display:"flex", alignItems:"center", gap:"10px",
+            background: t.colors.bgCard,
+            border:`1.5px solid ${t.colors.blueBorder}`,
+            borderRadius: t.radius.md,
+            padding:"12px 14px",
+            marginBottom:"4px",
+          }}>
+            <span style={{ fontSize:"24px", flexShrink:0 }}>{pasoInfo.icono}</span>
+            <div>
+              <p style={{ fontSize:"10px", fontWeight:t.fonts.weightBold, color:t.colors.textTertiary, textTransform:"uppercase", letterSpacing:"0.08em", margin:"0 0 2px" }}>
+                Paso {pasoActual} de 4 — {pasoInfo.titulo}
+              </p>
+              <p style={{ fontSize:t.fonts.sizeSm, color:t.colors.textPrimary, margin:0, lineHeight:1.4 }}>
+                {pasoInfo.banner}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+
 {rutas.length > 0 && (
   <div style={{padding:"10px 16px 0"}}>
     <button
@@ -660,8 +807,10 @@ const guardarRutaFrecuente = async () => {
       )}
 
       {/* ── DATOS DEL VIAJE ── */}
+      {(!modoGuiado || pasoActual === 1 || pasoActual === 2) && (
       <SeccionHeader num="1" ok={okDatos} label="Datos del viaje" abierta={secDatos} onToggle={()=>setSecDatos(!secDatos)} />
-      {secDatos && (<div style={{padding:"0 20px"}}>
+      )}
+      {(!modoGuiado || pasoActual === 1 || pasoActual === 2) && secDatos && (<div style={{padding:"0 20px"}}>
       <div style={styles.card}>
         <div style={styles.fila2}>
           <div style={styles.campo}>
@@ -1274,8 +1423,10 @@ const guardarRutaFrecuente = async () => {
       </div>)}
 
       {/* ── COMBUSTIBLE ── */}
+      {(!modoGuiado || pasoActual === 3) && (
       <SeccionHeader num="2" ok={okComb} label="Combustible / Adblue" abierta={secComb} onToggle={()=>setSecComb(!secComb)} />
-      {secComb && (<div style={{padding:"0 20px"}}>
+      )}
+      {(!modoGuiado || pasoActual === 3) && secComb && (<div style={{padding:"0 20px"}}>
       <div style={styles.card}>
         <div style={styles.campo}>
           <label style={styles.label}>Modo de cálculo</label>
@@ -1330,8 +1481,10 @@ const guardarRutaFrecuente = async () => {
       </div>)}
 
       {/* ── PEAJES ── */}
+      {(!modoGuiado || pasoActual === 4) && (
       <SeccionHeader num="3" ok={okPeajes} label="Peajes de ruta" abierta={secPeajes} onToggle={()=>setSecPeajes(!secPeajes)} />
-      {secPeajes && (<div style={{padding:"0 20px"}}>
+      )}
+      {(!modoGuiado || pasoActual === 4) && secPeajes && (<div style={{padding:"0 20px"}}>
       <div style={styles.card}>
         <div style={styles.campo}>
           <label style={styles.label}>Categoría del vehículo</label>
@@ -1399,8 +1552,10 @@ const guardarRutaFrecuente = async () => {
       </div>)}
 
       {/* ── COSTOS ── */}
+      {(!modoGuiado || pasoActual === 4) && (
       <SeccionHeader num="4" ok={okCostos} label="Costos del viaje" abierta={secCostos} onToggle={()=>setSecCostos(!secCostos)} />
-      {secCostos && (<div style={{padding:"0 20px"}}>
+      )}
+      {(!modoGuiado || pasoActual === 4) && secCostos && (<div style={{padding:"0 20px"}}>
       <div style={styles.card}>
         <div style={styles.campo}>
   <label style={styles.label}>Modo de pago conductor</label>
@@ -1473,8 +1628,10 @@ const guardarRutaFrecuente = async () => {
       </div>)}
 
       {/* ── DESCUENTOS DE LEY ── */}
+      {(!modoGuiado || pasoActual === 4) && (
       <SeccionHeader num="5" ok={okDesc} label="Descuentos de ley" abierta={secDesc} onToggle={()=>setSecDesc(!secDesc)} />
-{secDesc && (<div style={{padding:"0 20px"}}>
+      )}
+{(!modoGuiado || pasoActual === 4) && secDesc && (<div style={{padding:"0 20px"}}>
 <div style={styles.card}>
   <p style={{fontSize:t.fonts.sizeXs, color:t.colors.textSecondary, margin:"0 0 14px"}}>
     Activa los descuentos que aplique la empresa sobre el valor del viaje.
@@ -1590,6 +1747,7 @@ const guardarRutaFrecuente = async () => {
       </div>)}
 
       {/* ── RESULTADO ── */}
+      {(!modoGuiado || pasoActual === 4) && (
       <div style={{...styles.seccionHeader, cursor:"default"}}>
         <span style={styles.seccionHead}>
           <span style={{...styles.stepBadge, background:t.colors.greenSoft, color:t.colors.green}}>
@@ -1598,6 +1756,8 @@ const guardarRutaFrecuente = async () => {
           <span style={styles.seccionLabel}>Resultado del viaje</span>
         </span>
       </div>
+      )}
+      {(!modoGuiado || pasoActual === 4) && (
       <div style={styles.card}>
         <div style={styles.fila2}>
           <div style={styles.metCard}>
@@ -1697,6 +1857,51 @@ const guardarRutaFrecuente = async () => {
           )}
         </div>
 
+        {/* WIZARD: Navegación Anterior/Siguiente */}
+        {modoGuiado && (
+          <div style={{
+            display:"flex", gap:"10px",
+            borderTop:`1px solid ${t.colors.borderLight}`,
+            paddingTop:"14px", marginTop:"10px", marginBottom:"12px"
+          }}>
+            {pasoActual > 1 && (
+              <button
+                type="button"
+                onClick={() => setPasoActual(pasoActual - 1)}
+                style={{
+                  flex:1, minHeight:"48px", display:"flex", alignItems:"center",
+                  justifyContent:"center", gap:"8px",
+                  background:"none", border:`1.5px solid ${t.colors.border}`,
+                  borderRadius:t.radius.md, fontSize:t.fonts.sizeMd,
+                  fontWeight:t.fonts.weightSemibold, color:t.colors.textSecondary,
+                  cursor:"pointer",
+                }}
+              >
+                <ChevronLeft size={18} strokeWidth={2.5} />
+                Anterior
+              </button>
+            )}
+            {pasoActual < 4 && (
+              <button
+                type="button"
+                onClick={() => setPasoActual(pasoActual + 1)}
+                style={{
+                  flex:2, minHeight:"48px", display:"flex", alignItems:"center",
+                  justifyContent:"center", gap:"8px",
+                  background: t.colors.blue,
+                  border:"none", borderRadius:t.radius.md,
+                  fontSize:t.fonts.sizeMd, fontWeight:t.fonts.weightBold,
+                  color:"#fff", cursor:"pointer",
+                  boxShadow:"0 4px 14px rgba(59,130,246,0.35)",
+                }}
+              >
+                Siguiente
+                <ChevronRight size={18} strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
+        )}
+
         <button
           style={{...styles.btnGuardar, opacity: guardando?0.75:1}}
           onClick={guardarViaje}
@@ -1709,6 +1914,7 @@ const guardarRutaFrecuente = async () => {
           )}
         </button>
       </div>
+      )}
 
     </div>
   );
