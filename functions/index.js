@@ -4,10 +4,11 @@
  * memoria de flota/rutas, retorno, gastos, descuentos y anticipo.
  */
 
-const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getAuth } = require("firebase-admin/auth");
 
 initializeApp();
 const db = getFirestore();
@@ -1024,5 +1025,72 @@ exports.actualizarOdometroViaje = onDocumentWritten(
         console.error(`Error actualizando odómetro para viaje ${viajeId}:`, err);
       }
     }
+  }
+);
+
+// ── [BE-01] Alta Segura de Cuenta y Verificación Centralizada de Código Beta ──
+exports.validarAltaUsuario = onCall(
+  {
+    region: "us-central1",
+    cors: true,
+    maxInstances: 10,
+    memory: "256MiB",
+    timeoutSeconds: 30,
+  },
+  async (request) => {
+    // 1. Validar autenticación
+    if (!request.auth || !request.auth.uid) {
+      throw new HttpsError("unauthenticated", "Debe iniciar sesión para validar su cuenta.");
+    }
+
+    const { uid, token } = request.auth;
+    const { codigoBeta, aceptoTerminos, nombre } = request.data || {};
+
+    // 2. Validar aceptación de términos
+    if (!aceptoTerminos) {
+      await getAuth().deleteUser(uid).catch(() => {});
+      throw new HttpsError("failed-precondition", "Es obligatorio aceptar los términos y condiciones.");
+    }
+
+    // 3. Validar código beta en Firestore vía Admin SDK
+    const snapBeta = await db.doc("codigos_beta/principal").get();
+    if (!snapBeta.exists) {
+      throw new HttpsError("internal", "Configuración de códigos beta no disponible.");
+    }
+
+    const codigoEsperado = snapBeta.data().codigo || "";
+    const codigoIngresado = (codigoBeta || "").trim().toUpperCase();
+
+    if (!codigoEsperado || codigoIngresado !== codigoEsperado.trim().toUpperCase()) {
+      // Eliminar de Auth para evitar bypass de usuario sin código
+      await getAuth().deleteUser(uid).catch(() => {});
+      throw new HttpsError("permission-denied", "El código de invitación beta es inválido.");
+    }
+
+    // 4. Asignar Custom Claim en Auth
+    await getAuth().setCustomUserClaims(uid, {
+      betaValido: true,
+    });
+
+    // 5. Crear / Actualizar perfil en Firestore (usuarios/{uid})
+    const userRef = db.doc(`usuarios/${uid}`);
+    await userRef.set(
+      {
+        nombre: nombre || token.name || "",
+        correo: token.email || "",
+        aceptoTerminos: true,
+        fechaAceptacion: FieldValue.serverTimestamp(),
+        versionTerminos: "1.0",
+        betaValido: true,
+        creadoEn: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return {
+      status: "OK",
+      mensaje: "Cuenta validada exitosamente con código beta.",
+      betaValido: true,
+    };
   }
 );
