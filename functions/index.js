@@ -5,8 +5,9 @@
  */
 
 const { onRequest } = require("firebase-functions/v2/https");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 initializeApp();
 const db = getFirestore();
@@ -943,3 +944,64 @@ exports.botNavira = onRequest(
   }
   res.status(200).send("OK");
 });
+
+// ── Trigger: Actualización centralizada y atómica del odómetro (CR-17) ──
+exports.actualizarOdometroViaje = onDocumentWritten(
+  {
+    document: "usuarios/{uid}/viajes/{viajeId}",
+    region: "us-central1",
+    maxInstances: 10,
+  },
+  async (event) => {
+    const { uid, viajeId } = event.params;
+    const beforeData = event.data.before ? event.data.before.data() : null;
+    const afterData = event.data.after ? event.data.after.data() : null;
+
+    const placa = (afterData?.placa || beforeData?.placa || "").trim().toUpperCase().replace(/[\s\-]/g, "");
+    if (!placa) return;
+
+    let deltaKm = 0;
+    if (!beforeData && afterData) {
+      // 1. Viaje creado: sumar kmT
+      deltaKm = Number(afterData.kmT) || 0;
+    } else if (beforeData && !afterData) {
+      // 2. Viaje eliminado: restar kmT
+      deltaKm = -(Number(beforeData.kmT) || 0);
+    } else if (beforeData && afterData) {
+      // 3. Viaje editado: diferencia
+      const kmNuevo = Number(afterData.kmT) || 0;
+      const kmAnterior = Number(beforeData.kmT) || 0;
+      deltaKm = kmNuevo - kmAnterior;
+    }
+
+    if (deltaKm === 0) return;
+
+    // Buscar vehículo por ID directo o por placa normalizada
+    const vehId = afterData?.vehiculoId || beforeData?.vehiculoId;
+    let vehRef = null;
+
+    if (vehId) {
+      vehRef = db.doc(`usuarios/${uid}/vehiculos/${vehId}`);
+    } else {
+      const snap = await db.collection(`usuarios/${uid}/vehiculos`).get();
+      for (const d of snap.docs) {
+        if ((d.data().placa || "").trim().toUpperCase().replace(/[\s\-]/g, "") === placa) {
+          vehRef = d.ref;
+          break;
+        }
+      }
+    }
+
+    if (vehRef) {
+      try {
+        await vehRef.update({
+          kmOdometro: FieldValue.increment(deltaKm),
+          actualizadoEn: FieldValue.serverTimestamp(),
+        });
+        console.log(`[Odometro] Vehículo actualizado para viaje ${viajeId}: delta ${deltaKm} km`);
+      } catch (err) {
+        console.error(`Error actualizando odómetro para viaje ${viajeId}:`, err);
+      }
+    }
+  }
+);
