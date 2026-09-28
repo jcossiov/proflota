@@ -896,7 +896,15 @@ async function procesarMensaje(chatId, texto) {
 
 // ── Webhook ─────────────────────────────────────────────────
 
-exports.botNavira = onRequest({ region: "us-central1", cors: true }, async (req, res) => {
+exports.botNavira = onRequest(
+  {
+    region: "us-central1",
+    cors: true,
+    maxInstances: 10,
+    memory: "256MiB",
+    timeoutSeconds: 30,
+  },
+  async (req, res) => {
   try {
     // Seguridad: solo aceptar peticiones reales de Telegram (secret token)
     const secretRecibido = req.get("X-Telegram-Bot-Api-Secret-Token");
