@@ -172,11 +172,18 @@ function Cobros({ viajes = [], empresas = [], perfilFacturacion = {}, onGuardarC
     }
   };
 
+  const esc = (t) => String(t || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+
   const generarHTML = (cuenta) => {
     const p = cuenta.emisor || perfilFacturacion;
     const tipoDocLabel = { CC: "C.C.", CE: "C.E.", NIT: "NIT", CX: "C.E.", DE: "Doc. Ext.", PA: "Pasaporte", RC: "R.C.", TI: "T.I." };
+    const sanitizeImgUrl = (url) => {
+      if (!url) return "";
+      if (url.startsWith("https://") || url.startsWith("data:image/")) return url;
+      return "";
+    };
     return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Cuenta de Cobro N° ${String(cuenta.numero).padStart(3,"0")}</title>
+<html><head><meta charset="utf-8"><title>Cuenta de Cobro N° ${esc(String(cuenta.numero).padStart(3,"0"))}</title>
 <style>
   @page { margin: 2cm; }
   body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; color: #333; font-size: 14px; line-height: 1.6; }
@@ -198,45 +205,45 @@ function Cobros({ viajes = [], empresas = [], perfilFacturacion = {}, onGuardarC
   @media print { body { margin: 20px; } }
 </style></head><body>
 <div class="franja-navira franja-top"></div>
-<p class="fecha">${cuenta.ciudad || p.ciudad || "Colombia"}, ${new Date(cuenta.fecha).getDate()} de ${["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][new Date(cuenta.fecha).getMonth()]} de ${new Date(cuenta.fecha).getFullYear()}</p>
-<h2>CUENTA DE COBRO N° ${String(cuenta.numero).padStart(3, "0")}</h2>
+<p class="fecha">${esc(cuenta.ciudad || p.ciudad || "Colombia")}, ${new Date(cuenta.fecha).getDate()} de ${["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][new Date(cuenta.fecha).getMonth()]} de ${new Date(cuenta.fecha).getFullYear()}</p>
+<h2>CUENTA DE COBRO N° ${esc(String(cuenta.numero).padStart(3, "0"))}</h2>
 <div class="centro">
   <p><strong>A QUIEN VA DIRIGIDA LA CUENTA DE COBRO:</strong></p>
-  <p><strong>${cuenta.cliente?.nombre || ""}</strong></p>
-  <p>${cuenta.cliente?.nit ? (tipoDocLabel["NIT"] || "NIT") + " " + cuenta.cliente.nit : ""}</p>
+  <p><strong>${esc(cuenta.cliente?.nombre || "")}</strong></p>
+  <p>${cuenta.cliente?.nit ? esc((tipoDocLabel["NIT"] || "NIT") + " " + cuenta.cliente.nit) : ""}</p>
 </div>
 <div class="centro">
   <p>DEBE A:</p>
-  <p><strong>${p.nombreCompleto || ""}</strong></p>
-  <p>${tipoDocLabel[p.tipoDoc] || "C.C."} ${p.numeroDoc || ""}</p>
+  <p><strong>${esc(p.nombreCompleto || "")}</strong></p>
+  <p>${esc(tipoDocLabel[p.tipoDoc] || "C.C.")} ${esc(p.numeroDoc || "")}</p>
 </div>
 <div class="concepto">
-  <p>La suma de <strong>${cuenta.totalPagar?.toLocaleString("es-CO")} PESOS (${cuenta.valorEnLetras || ""})</strong>,
-  por concepto de <strong>${cuenta.concepto || ""}</strong>.</p>
+  <p>La suma de <strong>${cuenta.totalPagar?.toLocaleString("es-CO")} PESOS (${esc(cuenta.valorEnLetras || "")})</strong>,
+  por concepto de <strong>${esc(cuenta.concepto || "")}</strong>.</p>
 </div>
 ${cuenta.viajes && cuenta.viajes.length > 0 ? `
 <table class="detalle">
   <tr><th>Fecha</th><th>Manifiesto</th><th>Ruta</th><th>Placa</th><th>Ton</th><th class="right">Valor</th></tr>
   ${cuenta.viajes.map(v => `<tr>
-    <td>${v.fecha || ""}</td>
-    <td>${v.manifiesto || ""}</td>
-    <td>${v.ruta || ""}</td>
-    <td>${v.placa || ""}</td>
-    <td>${v.tonelaje || ""}</td>
+    <td>${esc(v.fecha || "")}</td>
+    <td>${esc(v.manifiesto || "")}</td>
+    <td>${esc(v.ruta || "")}</td>
+    <td>${esc(v.placa || "")}</td>
+    <td>${esc(v.tonelaje || "")}</td>
     <td class="right">${(v.valorBruto||0).toLocaleString("es-CO")}</td>
   </tr>`).join("")}
   <tr><td colspan="5"><strong>Subtotal</strong></td><td class="right"><strong>${(cuenta.totalBruto||0).toLocaleString("es-CO")}</strong></td></tr>
   ${cuenta.totalAnticipos > 0 ? `<tr><td colspan="5">(-) Anticipos recibidos</td><td class="right">${(cuenta.totalAnticipos||0).toLocaleString("es-CO")}</td></tr>` : ""}
   <tr><td colspan="5"><strong>TOTAL A PAGAR</strong></td><td class="right"><strong>${(cuenta.totalPagar||0).toLocaleString("es-CO")}</strong></td></tr>
 </table>` : ""}
-${p.banco ? `<p class="banco">Favor consignar a la cuenta <strong>${p.banco} - ${p.tipoCuenta || "Ahorros"} - ${p.numeroCuenta || ""}</strong>. A nombre de <strong>${p.titularCuenta || p.nombreCompleto || ""}</strong>.</p>` : ""}
+${p.banco ? `<p class="banco">Favor consignar a la cuenta <strong>${esc(p.banco)} - ${esc(p.tipoCuenta || "Ahorros")} - ${esc(p.numeroCuenta || "")}</strong>. A nombre de <strong>${esc(p.titularCuenta || p.nombreCompleto || "")}</strong>.</p>` : ""}
 <div class="firma">
   <p>Atentamente,</p>
-  ${p.firmaUrl ? `<img src="${p.firmaUrl}" alt="Firma" class="firma-img" />` : ""}
+  ${p.firmaUrl && sanitizeImgUrl(p.firmaUrl) ? `<img src="${sanitizeImgUrl(p.firmaUrl)}" alt="Firma" class="firma-img" />` : ""}
   <div class="linea">
-    <p><strong>${p.nombreCompleto || ""}</strong></p>
-    <p><strong>${tipoDocLabel[p.tipoDoc] || "C.C."}</strong> ${p.numeroDoc || ""}</p>
-    ${p.telefono ? `<p><strong>Tel:</strong> ${p.telefono}</p>` : ""}
+    <p><strong>${esc(p.nombreCompleto || "")}</strong></p>
+    <p><strong>${esc(tipoDocLabel[p.tipoDoc] || "C.C.")}</strong> ${esc(p.numeroDoc || "")}</p>
+    ${p.telefono ? `<p><strong>Tel:</strong> ${esc(p.telefono)}</p>` : ""}
   </div>
 </div>
 <div class="franja-navira franja-bottom"></div>

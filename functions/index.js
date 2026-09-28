@@ -25,6 +25,7 @@ async function enviar(chatId, texto) {
 }
 
 const fmt = (n) => "$" + Math.round(n || 0).toLocaleString("es-CO");
+const esc = (t) => String(t || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const esNo = (t) => ["no", "-", "n", "ninguno", "nada"].includes(t.toLowerCase());
 
 function hoyLocal(offsetDias = 0) {
