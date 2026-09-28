@@ -8,7 +8,8 @@ import { ArrowLeft, User, Mail, Bell, Volume2, MessageCircle, MapPin, Phone, Lan
 import { useAuth } from "../hooks/useAuth";
 import { subirPeajes } from "../scripts/subirPeajes";
 import { doc, setDoc, getDoc } from "firebase/firestore";
-import { db } from "../firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "../firebase";
 import { theme as t } from "../styles/theme";
 import FirmaCanvas from "../components/FirmaCanvas";
 import { ConfirmarModal } from "../components/ConfirmarModal";
@@ -146,16 +147,28 @@ function Configuracion({mostrarToast}) {
     }
   };
 
-    const guardarFirma = async (dataUrl) => {
+  const guardarFirma = async (dataUrl) => {
     setGuardandoFirma(true);
-    const nuevo = { ...perfilFact, firmaUrl: dataUrl };
-    setPerfilFact(nuevo);
     try {
+      let finalFirmaUrl = dataUrl;
+      try {
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+        const firmaRef = ref(storage, `usuarios/${usuario.uid}/firma_${Date.now()}.png`);
+        await uploadBytes(firmaRef, blob, { contentType: "image/png" });
+        finalFirmaUrl = await getDownloadURL(firmaRef);
+      } catch (storageErr) {
+        console.warn("Firma Storage upload fallback:", storageErr);
+      }
+
+      const nuevo = { ...perfilFact, firmaUrl: finalFirmaUrl };
+      setPerfilFact(nuevo);
       await setDoc(doc(db, "usuarios", usuario.uid), {
         perfilFacturacion: nuevo,
       }, { merge: true });
-      mostrarToast("Firma guardada", "exito");
+      mostrarToast("Firma guardada correctamente", "exito");
     } catch (err) {
+      console.error(err);
       mostrarToast("Error al guardar la firma", "error");
     } finally {
       setGuardandoFirma(false);

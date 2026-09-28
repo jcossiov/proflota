@@ -9,12 +9,16 @@ function Toast({ mensaje, tipo = "exito", onCerrar }) {
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
+    let timerCerrar;
     const timer = setTimeout(() => {
       setVisible(false);
-      setTimeout(onCerrar, 300);
+      timerCerrar = setTimeout(onCerrar, 300);
     }, 3000);
-    return () => clearTimeout(timer);
-  }, []);
+    return () => {
+      clearTimeout(timer);
+      if (timerCerrar) clearTimeout(timerCerrar);
+    };
+  }, [onCerrar]);
 
   const colores = {
     exito: { bg: t.colors.greenSoft,  border: t.colors.greenBorder, color: t.colors.green },

@@ -3,7 +3,7 @@
  * FE-08: Borrador persistente + beforeunload | FE-41: Targets táctiles | FE-44: Tuteo guiado
  * FE-WIZARD: Máximo 3 campos por pantalla, fondo claro, opciones en tarjetas
  */
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, Save, Plus, X, ChevronDown, ChevronUp, MapPin, Lightbulb, AlertTriangle, Check, ChevronRight, ChevronLeft, Zap } from "lucide-react";
 import { theme as t } from "../styles/theme";
@@ -22,9 +22,12 @@ function Calculadora({ vehiculos, viajes, rutas = [], peajes = [], conductores =
   const guardandoRef = useRef(false);
   const guardandoRutaRef = useRef(false);
 
-  const PEAJES_CO = peajes.length > 0
-  ? [...peajes].sort((a, b) => a.n.localeCompare(b.n, 'es'))
-  : [];
+  // Memoizar ordenamiento de peajes (FE-46 por JESUS COSSIO DEV)
+  const PEAJES_CO = useMemo(() => {
+    return peajes.length > 0
+      ? [...peajes].sort((a, b) => (a.n || "").localeCompare(b.n || "", "es"))
+      : [];
+  }, [peajes]);
   const navigate = useNavigate();
   const location = useLocation();
 
