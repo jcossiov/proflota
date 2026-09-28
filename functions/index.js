@@ -137,14 +137,38 @@ async function resetViaje(chatId) {
   await db.doc(`telegram_sesiones/${chatId}`).set({ paso: null, viaje: {}, expiraEn, actualizadoEn: new Date() }, { merge: true });
 }
 
-// ── Memoria ─────────────────────────────────────────────────
+// ── Memoria Indexada por Claves Normalizadas (BE-27) ──────────
 
 async function buscarVehiculo(uid, placaTexto) {
-  const placa = placaTexto.trim().toUpperCase().replace(/[\s\-]/g, "");
-  const snap = await db.collection(`usuarios/${uid}/vehiculos`).get();
+  const placa = (placaTexto || "").trim().toUpperCase().replace(/[\s\-]/g, "");
+  if (!placa) return null;
+
+  // 1. Consulta directa indexada por placaNorm (1 sola lectura de Firestore)
+  const snapNorm = await db.collection(`usuarios/${uid}/vehiculos`)
+    .where("placaNorm", "==", placa)
+    .limit(1)
+    .get();
+  if (!snapNorm.empty) {
+    const d = snapNorm.docs[0];
+    return { firestoreId: d.id, ...d.data() };
+  }
+
+  // 2. Consulta indexada por placa exacta
+  const snapExact = await db.collection(`usuarios/${uid}/vehiculos`)
+    .where("placa", "==", placa)
+    .limit(1)
+    .get();
+  if (!snapExact.empty) {
+    const d = snapExact.docs[0];
+    return { firestoreId: d.id, ...d.data() };
+  }
+
+  // 3. Fallback acotado a 30 registros para documentos legacy sin clave normalizada
+  const snap = await db.collection(`usuarios/${uid}/vehiculos`).limit(30).get();
   for (const d of snap.docs) {
     const v = d.data();
     if ((v.placa || "").toUpperCase().replace(/[\s\-]/g, "") === placa) {
+      d.ref.update({ placaNorm: placa }).catch(() => {});
       return { firestoreId: d.id, ...v };
     }
   }
@@ -152,39 +176,93 @@ async function buscarVehiculo(uid, placaTexto) {
 }
 
 async function buscarMemoriaRuta(uid, rutaTexto) {
-  const norm = rutaTexto.trim().toLowerCase();
-  const rutasSnap = await db.collection(`usuarios/${uid}/rutas`).get();
-  for (const d of rutasSnap.docs) {
-    const r = d.data();
-    if ((r.nombre || r.ruta || "").trim().toLowerCase() === norm) return { tipo: "frecuente", ...r };
-  }
-  const viajesSnap = await db.collection(`usuarios/${uid}/viajes`).orderBy("fecha", "desc").limit(200).get();
+  const norm = (rutaTexto || "").trim().toLowerCase();
+  if (!norm) return null;
+
+  // 1. Consulta indexada en rutas frecuentes (rutaNorm o nombre) con limit(1)
+  const snapRutaNorm = await db.collection(`usuarios/${uid}/rutas`)
+    .where("rutaNorm", "==", norm)
+    .limit(1)
+    .get();
+  if (!snapRutaNorm.empty) return { tipo: "frecuente", ...snapRutaNorm.docs[0].data() };
+
+  const snapRutaNom = await db.collection(`usuarios/${uid}/rutas`)
+    .where("nombre", "==", rutaTexto.trim())
+    .limit(1)
+    .get();
+  if (!snapRutaNom.empty) return { tipo: "frecuente", ...snapRutaNom.docs[0].data() };
+
+  // 2. Consulta indexada en historial de viajes por rutaNorm ordenada por fecha desc
+  const viajesSnapNorm = await db.collection(`usuarios/${uid}/viajes`)
+    .where("rutaNorm", "==", norm)
+    .orderBy("fecha", "desc")
+    .limit(1)
+    .get();
+  if (!viajesSnapNorm.empty) return { tipo: "historial", ...viajesSnapNorm.docs[0].data() };
+
+  const viajesSnapExact = await db.collection(`usuarios/${uid}/viajes`)
+    .where("ruta", "==", rutaTexto.trim())
+    .orderBy("fecha", "desc")
+    .limit(1)
+    .get();
+  if (!viajesSnapExact.empty) return { tipo: "historial", ...viajesSnapExact.docs[0].data() };
+
+  // 3. Fallback acotado a los últimos 15 viajes (en vez de 200 en memoria)
+  const viajesSnap = await db.collection(`usuarios/${uid}/viajes`).orderBy("fecha", "desc").limit(15).get();
   for (const d of viajesSnap.docs) {
     const v = d.data();
-    if ((v.ruta || "").trim().toLowerCase() === norm) return { tipo: "historial", ...v };
+    if ((v.ruta || "").trim().toLowerCase() === norm) {
+      d.ref.update({ rutaNorm: norm }).catch(() => {});
+      return { tipo: "historial", ...v };
+    }
   }
   return null;
 }
 
-// Busca el NIT de una empresa en el directorio. Devuelve {nit, existe}.
+// Busca el NIT de una empresa en el directorio con consulta indexada
 async function buscarEmpresa(uid, nombreEmp) {
   const norm = (nombreEmp || "").trim().toLowerCase();
   if (!norm) return { nit: "", existe: false };
-  const snap = await db.collection(`usuarios/${uid}/empresas`).get();
+
+  // 1. Consulta directa indexada por razonSocialNorm
+  const snapNorm = await db.collection(`usuarios/${uid}/empresas`)
+    .where("razonSocialNorm", "==", norm)
+    .limit(1)
+    .get();
+  if (!snapNorm.empty) {
+    const e = snapNorm.docs[0].data();
+    return { nit: e.nit || "", existe: true };
+  }
+
+  // 2. Consulta indexada por razonSocial exacta
+  const snapExact = await db.collection(`usuarios/${uid}/empresas`)
+    .where("razonSocial", "==", nombreEmp.trim())
+    .limit(1)
+    .get();
+  if (!snapExact.empty) {
+    const e = snapExact.docs[0].data();
+    return { nit: e.nit || "", existe: true };
+  }
+
+  // 3. Fallback acotado a 30 registros
+  const snap = await db.collection(`usuarios/${uid}/empresas`).limit(30).get();
   for (const d of snap.docs) {
     const e = d.data();
     if ((e.razonSocial || e.nombre || "").trim().toLowerCase() === norm) {
+      d.ref.update({ razonSocialNorm: norm }).catch(() => {});
       return { nit: e.nit || "", existe: true };
     }
   }
   return { nit: "", existe: false };
 }
 
-// Registra una empresa nueva en el directorio invisible (con NIT)
+// Registra una empresa nueva en el directorio con clave normalizada
 async function registrarEmpresa(uid, nombre, nit) {
   if (!nombre.trim() || !nit.trim()) return;
+  const norm = nombre.trim().toLowerCase();
   await db.collection(`usuarios/${uid}/empresas`).add({
     razonSocial: nombre.trim(),
+    razonSocialNorm: norm,
     nit: nit.trim(),
     tipo: "cliente",
     ciudad: "", contacto: "", telefono: "", correo: "",
@@ -832,7 +910,9 @@ async function procesarMensaje(chatId, texto) {
       remesa: vj.remesa || "",
       pesoBascula: vj.pesoBascula || 0,
       placa: vj.placa,
+      placaNorm: (vj.placa || "").trim().toUpperCase().replace(/[\s\-]/g, ""),
       ruta: vj.ruta,
+      rutaNorm: (vj.ruta || "").trim().toLowerCase(),
       emp: vj.emp || "",
       nitEmpresa: vj.nitEmpresa || "",
       condNom: vj.condNom || "",

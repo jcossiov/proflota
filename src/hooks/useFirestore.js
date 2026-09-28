@@ -154,29 +154,42 @@ export function useFirestore(uid) {
   // ── CRUD ──
 
   const agregarVehiculo = async (datos) => {
-    await addDoc(collection(db, rutaVehiculos), { ...datos, creadoEn: new Date().toISOString() });
+    const placaNorm = (datos.placa || "").trim().toUpperCase().replace(/[\s\-]/g, "");
+    await addDoc(collection(db, rutaVehiculos), { ...datos, placaNorm, creadoEn: new Date().toISOString() });
   };
   const eliminarVehiculo = async (firestoreId) => {
     await deleteDoc(doc(db, rutaVehiculos, firestoreId));
   };
   const editarVehiculo = async (firestoreId, datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
+    if (datos.placa) {
+      datosLimpios.placaNorm = datos.placa.trim().toUpperCase().replace(/[\s\-]/g, "");
+    }
     await updateDoc(doc(db, rutaVehiculos, firestoreId), datosLimpios);
   };
 
   const agregarViaje = async (datos) => {
-    await addDoc(collection(db, rutaViajes), { ...datos, creadoEn: new Date().toISOString() });
+    const placaNorm = (datos.placa || "").trim().toUpperCase().replace(/[\s\-]/g, "");
+    const rutaNorm = (datos.ruta || "").trim().toLowerCase();
+    await addDoc(collection(db, rutaViajes), { ...datos, placaNorm, rutaNorm, creadoEn: new Date().toISOString() });
   };
   const eliminarViaje = async (firestoreId) => {
     await deleteDoc(doc(db, rutaViajes, firestoreId));
   };
   const editarViaje = async (firestoreId, datos) => {
     const datosLimpios = JSON.parse(JSON.stringify(datos));
+    if (datos.placa) {
+      datosLimpios.placaNorm = datos.placa.trim().toUpperCase().replace(/[\s\-]/g, "");
+    }
+    if (datos.ruta) {
+      datosLimpios.rutaNorm = datos.ruta.trim().toLowerCase();
+    }
     await updateDoc(doc(db, rutaViajes, firestoreId), datosLimpios);
   };
 
   const agregarEmpresa = async (datos) => {
-    await addDoc(collection(db, rutaEmpresas), { ...datos, creadoEn: new Date().toISOString() });
+    const razonSocialNorm = (datos.razonSocial || datos.nombre || "").trim().toLowerCase();
+    await addDoc(collection(db, rutaEmpresas), { ...datos, razonSocialNorm, creadoEn: new Date().toISOString() });
   };
   const eliminarEmpresa = async (firestoreId) => {
     await deleteDoc(doc(db, rutaEmpresas, firestoreId));
@@ -188,8 +201,10 @@ export function useFirestore(uid) {
     guardandoRuta = true;
     if (!uid) throw new Error("Sin uid");
     const datosLimpios = JSON.parse(JSON.stringify(datos));
+    const rutaNorm = (datos.nombre || datos.ruta || "").trim().toLowerCase();
     await addDoc(collection(db, `usuarios/${uid}/rutas`), {
       ...datosLimpios,
+      rutaNorm,
       creadoEn: new Date().toISOString(),
     });
     guardandoRuta = false;
