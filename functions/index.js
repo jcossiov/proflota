@@ -114,10 +114,12 @@ async function getSesion(chatId) {
   return snap.exists ? snap.data() : null;
 }
 async function setSesion(chatId, datos) {
-  await db.doc(`telegram_sesiones/${chatId}`).set(datos, { merge: true });
+  const expiraEn = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas de inactividad
+  await db.doc(`telegram_sesiones/${chatId}`).set({ ...datos, expiraEn, actualizadoEn: new Date() }, { merge: true });
 }
 async function resetViaje(chatId) {
-  await db.doc(`telegram_sesiones/${chatId}`).set({ paso: null, viaje: {} }, { merge: true });
+  const expiraEn = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas de inactividad
+  await db.doc(`telegram_sesiones/${chatId}`).set({ paso: null, viaje: {}, expiraEn, actualizadoEn: new Date() }, { merge: true });
 }
 
 // ── Memoria ─────────────────────────────────────────────────
