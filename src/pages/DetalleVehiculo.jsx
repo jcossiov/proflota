@@ -112,6 +112,13 @@ function DetalleVehiculo({ vehiculos, viajes = [], conductores = [], mantenimien
       setHvCargado(true);
     }
   }, [vehiculo?.hvData]);
+
+  // Sincronizar tabActivo con location.state (FE-26)
+  useEffect(() => {
+    if (location.state?.tab) {
+      setTabActivo(location.state.tab);
+    }
+  }, [location.state?.tab]);
   const [seccionesAbiertas, setSeccionesAbiertas] = useState({propietario:true,tenedor:false,vehiculo:false,conductor:false});
 
   const { subirArchivo, eliminarArchivo, progreso: progresoArchivo, subiendo } = useSubirArchivo();
