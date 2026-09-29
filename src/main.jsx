@@ -1,10 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
-import { aplicarTema, obtenerTemaActual } from './styles/theme'
-
-// Inicializar tema guardado (Modo Oscuro / Modo Claro)
-aplicarTema(obtenerTemaActual());
 
 createRoot(document.getElementById('root')).render(
   <App />

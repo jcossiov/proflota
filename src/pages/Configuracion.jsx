@@ -4,9 +4,8 @@
  */
 import { useState, useEffect} from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Mail, Bell, Volume2, MessageCircle, MapPin, Phone, Landmark, Trash2, AlertTriangle, Check, Moon, Sun } from "lucide-react";
+import { ArrowLeft, User, Mail, Bell, Volume2, MessageCircle, MapPin, Phone, Landmark, Trash2, AlertTriangle, Check } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
-import { useTheme } from "../hooks/useTheme";
 import { subirPeajes } from "../scripts/subirPeajes";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -18,7 +17,6 @@ import { ConfirmarModal } from "../components/ConfirmarModal";
 function Configuracion({mostrarToast}) {
   const navigate = useNavigate();
   const { usuario, eliminarCuenta } = useAuth();
-  const { tema, esOscuro, cambiarTema } = useTheme();
   const [confirmaEliminar, setConfirmaEliminar] = useState(false);
   const [textoConfirm, setTextoConfirm] = useState("");
   const [eliminando, setEliminando] = useState(false);
@@ -212,59 +210,6 @@ function Configuracion({mostrarToast}) {
               <p style={styles.filaSub}>{usuario?.email || "—"}</p>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* TEMA / APARIENCIA NAVIRA */}
-      <div style={styles.seccionTitulo}>Apariencia y Modo Visual</div>
-      <div style={{...styles.seccion, padding: "16px"}}>
-        <p style={{fontSize: t.fonts.sizeXs, color: t.colors.textSecondary, margin: "0 0 12px", lineHeight: 1.5}}>
-          Personaliza la interfaz con la colorimetría oficial de NAVIRA para conducción diurna o nocturna:
-        </p>
-        <div style={{display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px"}}>
-          <button
-            type="button"
-            onClick={() => { cambiarTema("dark"); mostrarToast("Modo Oscuro activado", "info"); }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              padding: "14px",
-              borderRadius: t.radius.md,
-              border: `2px solid ${esOscuro ? t.colors.blue : t.colors.border}`,
-              background: esOscuro ? t.colors.blueSoft : t.colors.bgCard,
-              color: esOscuro ? t.colors.blueText : t.colors.textSecondary,
-              fontWeight: t.fonts.weightBold,
-              fontSize: t.fonts.sizeSm,
-              cursor: "pointer",
-            }}
-          >
-            <Moon size={18} color={esOscuro ? t.colors.blueText : t.colors.textSecondary} strokeWidth={2.2} />
-            <span>Modo Oscuro</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { cambiarTema("light"); mostrarToast("Modo Claro activado", "info"); }}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              padding: "14px",
-              borderRadius: t.radius.md,
-              border: `2px solid ${!esOscuro ? t.colors.blue : t.colors.border}`,
-              background: !esOscuro ? t.colors.blueSoft : t.colors.bgCard,
-              color: !esOscuro ? t.colors.blueText : t.colors.textSecondary,
-              fontWeight: t.fonts.weightBold,
-              fontSize: t.fonts.sizeSm,
-              cursor: "pointer",
-            }}
-          >
-            <Sun size={18} color={!esOscuro ? t.colors.blueText : t.colors.textSecondary} strokeWidth={2.2} />
-            <span>Modo Claro</span>
-          </button>
         </div>
       </div>
 
