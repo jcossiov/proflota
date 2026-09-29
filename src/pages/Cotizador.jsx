@@ -5,8 +5,9 @@
  */
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Zap, TrendingUp, TrendingDown, AlertTriangle, ChevronDown, ChevronUp, Sparkles, CheckCircle2, RotateCcw } from "lucide-react";
+import { ArrowLeft, Zap, TrendingUp, TrendingDown, AlertTriangle, ChevronDown, ChevronUp, Sparkles, CheckCircle2, RotateCcw, MapPin } from "lucide-react";
 import { theme as t } from "../styles/theme";
+import { CIUDADES_COLOMBIA } from "../data/colombiaData";
 import {
   WizardPantalla,
   WizardHeader,
@@ -57,6 +58,8 @@ function Cotizador({ vehiculos = [], rutas = [], mostrarToast }) {
   const [modoFlete, setModoFlete] = useState("porTon"); // porTon | total
 
   // Ruta / distancia
+  const [origen, setOrigen] = useState("");
+  const [destino, setDestino] = useState("");
   const [kmCargado, setKmCargado] = useState("");
   const [kmVacio, setKmVacio] = useState("");
 
@@ -89,6 +92,8 @@ function Cotizador({ vehiculos = [], rutas = [], mostrarToast }) {
         if (d.toneladas) setToneladas(d.toneladas);
         if (d.fleteOfrecido) setFleteOfrecido(d.fleteOfrecido);
         if (d.modoFlete) setModoFlete(d.modoFlete);
+        if (d.origen) setOrigen(d.origen);
+        if (d.destino) setDestino(d.destino);
         if (d.kmCargado) setKmCargado(d.kmCargado);
         if (d.kmVacio) setKmVacio(d.kmVacio);
         if (d.rendCargado) setRendCargado(d.rendCargado);
@@ -108,17 +113,19 @@ function Cotizador({ vehiculos = [], rutas = [], mostrarToast }) {
     const handler = setTimeout(() => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          placa, toneladas, fleteOfrecido, modoFlete, kmCargado, kmVacio,
+          placa, toneladas, fleteOfrecido, modoFlete, origen, destino, kmCargado, kmVacio,
           rendCargado, rendVacio, precioAcpm, peajes, modoConductor,
           valorConductor, otrosGastos, utilidadDeseada
         }));
       } catch (_) {}
     }, 400);
     return () => clearTimeout(handler);
-  }, [placa, toneladas, fleteOfrecido, modoFlete, kmCargado, kmVacio, rendCargado, rendVacio, precioAcpm, peajes, modoConductor, valorConductor, otrosGastos, utilidadDeseada]);
+  }, [placa, toneladas, fleteOfrecido, modoFlete, origen, destino, kmCargado, kmVacio, rendCargado, rendVacio, precioAcpm, peajes, modoConductor, valorConductor, otrosGastos, utilidadDeseada]);
 
   const limpiarCotizacion = () => {
     setFleteOfrecido("");
+    setOrigen("");
+    setDestino("");
     setKmCargado("");
     setKmVacio("");
     setPeajes("");
@@ -129,6 +136,20 @@ function Cotizador({ vehiculos = [], rutas = [], mostrarToast }) {
   };
 
   const cargarRuta = (r) => {
+    if (r.origen && r.destino) {
+      setOrigen(r.origen);
+      setDestino(r.destino);
+    } else if (r.ruta && r.ruta.includes("→")) {
+      const [o, d] = r.ruta.split("→").map(s => s.trim());
+      setOrigen(o || "");
+      setDestino(d || "");
+    } else if (r.ruta && r.ruta.includes(" - ")) {
+      const [o, d] = r.ruta.split(" - ").map(s => s.trim());
+      setOrigen(o || "");
+      setDestino(d || "");
+    } else if (r.ruta) {
+      setOrigen(r.ruta);
+    }
     setKmCargado(String(r.kmCargado || ""));
     setKmVacio(String(r.kmVacio || ""));
     if (r.rendCargado) setRendCargado(String(r.rendCargado));
@@ -350,8 +371,8 @@ function Cotizador({ vehiculos = [], rutas = [], mostrarToast }) {
           <>
             <WizardBanner
               icono="🛣️"
-              titulo="¿Cuántos kilómetros vas a recorrer?"
-              mensaje="Ingresa los kilómetros cargado y si tendrás que rodar vacío para cargar o volver."
+              titulo="¿Cuál es la ruta y la distancia?"
+              mensaje="Ingresa el origen y destino con sugerencias de Colombia, más los kilómetros del viaje."
             />
             <div style={stylesWz.cardWrapper}>
               {rutasDisponibles.length > 0 && (
@@ -388,6 +409,31 @@ function Cotizador({ vehiculos = [], rutas = [], mostrarToast }) {
                   )}
                 </div>
               )}
+
+              <datalist id="ciudades-colombia-cotizador">
+                {CIUDADES_COLOMBIA.map(c => <option key={c} value={c} />)}
+              </datalist>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <WizardCampo label="Ciudad de Origen" ayuda="Lugar de cargue">
+                  <WizardInput
+                    type="text"
+                    placeholder="Ej: Barranquilla"
+                    list="ciudades-colombia-cotizador"
+                    value={origen}
+                    onChange={e => setOrigen(e.target.value)}
+                  />
+                </WizardCampo>
+                <WizardCampo label="Ciudad de Destino" ayuda="Lugar de entrega">
+                  <WizardInput
+                    type="text"
+                    placeholder="Ej: Bogotá D.C."
+                    list="ciudades-colombia-cotizador"
+                    value={destino}
+                    onChange={e => setDestino(e.target.value)}
+                  />
+                </WizardCampo>
+              </div>
 
               <WizardCampo label="Kilómetros cargado (Ida)" obligatorio ayuda="Distancia desde el cargue hasta la entrega">
                 <WizardInput
@@ -827,8 +873,32 @@ function Cotizador({ vehiculos = [], rutas = [], mostrarToast }) {
           </>
         )}
 
-        {/* DISTANCIA */}
-        <p style={styles.subSeccion}>🛣 Distancia</p>
+        {/* RUTA Y DISTANCIA */}
+        <p style={styles.subSeccion}>📍 Ruta y Distancia</p>
+        <div style={styles.grid2}>
+          <div>
+            <label style={styles.label}>Origen</label>
+            <input
+              type="text"
+              placeholder="Barranquilla"
+              list="ciudades-colombia-cotizador"
+              value={origen}
+              onChange={e => setOrigen(e.target.value)}
+              style={styles.input}
+            />
+          </div>
+          <div>
+            <label style={styles.label}>Destino</label>
+            <input
+              type="text"
+              placeholder="Bogotá D.C."
+              list="ciudades-colombia-cotizador"
+              value={destino}
+              onChange={e => setDestino(e.target.value)}
+              style={styles.input}
+            />
+          </div>
+        </div>
         <div style={styles.grid2}>
           <div>
             <label style={styles.label}>Km cargado</label>

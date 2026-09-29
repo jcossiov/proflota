@@ -73,6 +73,9 @@ function AgregarVehiculo({ vehiculos, conductores = [], onGuardar }) {
   const [guardando,     setGuardando]    = useState(false);
   const [errores,       setErrores]      = useState({});
 
+  const PLACA_VEHICULO_REGEX = /^[A-Z]{3}[0-9]{3}$/;
+  const PLACA_REMOLQUE_REGEX = /^([A-Z]{3}[0-9]{3}|[R-Z][0-9]{5}|[0-9]{6})$/;
+
   /* Validación por sub-paso */
   const validarPaso = () => {
     const e = {};
@@ -80,9 +83,21 @@ function AgregarVehiculo({ vehiculos, conductores = [], onGuardar }) {
       if (!tipoVehiculo) e.tipoVehiculo = "Elige el tipo de vehículo";
     }
     if (subPaso === 2) {
-      if (!placa.trim())    e.placa = "La placa es obligatoria";
-      if (vehiculos.find(v => v.placa.toLowerCase() === placa.trim().toLowerCase()))
-        e.placa = "Ya existe un vehículo con esa placa";
+      const placaLimpia = placa.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (!placaLimpia) {
+        e.placa = "La placa es obligatoria";
+      } else if (!PLACA_VEHICULO_REGEX.test(placaLimpia)) {
+        e.placa = "Formato inválido: la placa debe tener exactamente 3 letras y 3 números (Ej: ABC123)";
+      } else if (vehiculos.find(v => v.placa.toUpperCase().replace(/[^A-Z0-9]/g, "") === placaLimpia)) {
+        e.placa = "Ya existe un vehículo con esa placa en tu flota";
+      }
+
+      if (placaRemolque.trim()) {
+        const remolqueLimpio = placaRemolque.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (!PLACA_REMOLQUE_REGEX.test(remolqueLimpio)) {
+          e.placaRemolque = "Formato inválido (Ej: R12345 o ABC123)";
+        }
+      }
     }
     if (subPaso === 3) {
       if (!propietario.trim()) e.propietario = "El nombre del propietario es obligatorio";

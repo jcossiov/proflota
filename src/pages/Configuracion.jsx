@@ -2,10 +2,11 @@
  * Hecho por JESUS COSSIO DEV
  * Optimizaciones de arquitectura, accesibilidad y experiencia de usuario
  */
-import { useState, useEffect} from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Mail, Bell, Volume2, MessageCircle, MapPin, Phone, Landmark, Trash2, AlertTriangle, Check } from "lucide-react";
+import { ArrowLeft, User, Mail, Bell, Volume2, MessageCircle, MapPin, Phone, Landmark, Trash2, AlertTriangle, Check, Moon, Sun, Monitor } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../hooks/useTheme";
 import { subirPeajes } from "../scripts/subirPeajes";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -17,6 +18,7 @@ import { ConfirmarModal } from "../components/ConfirmarModal";
 function Configuracion({mostrarToast}) {
   const navigate = useNavigate();
   const { usuario, eliminarCuenta } = useAuth();
+  const { tema, cambiarTema } = useTheme();
   const [confirmaEliminar, setConfirmaEliminar] = useState(false);
   const [textoConfirm, setTextoConfirm] = useState("");
   const [eliminando, setEliminando] = useState(false);
@@ -214,8 +216,49 @@ function Configuracion({mostrarToast}) {
       </div>
 
       {/* PREFERENCIAS */}
-      <div style={styles.seccionTitulo}>Preferencias</div>
+      <div style={styles.seccionTitulo}>Apariencia y Preferencias</div>
       <div style={styles.seccion}>
+        {/* TEMA OSCURO / CLARO */}
+        <div style={{ ...styles.fila, borderBottom: `1px solid ${t.colors.borderLight}` }}>
+          <div style={styles.filaIzq}>
+            <span style={styles.filaIcono}>
+              {tema === "dark" ? <Moon size={18} color={t.colors.blueText} strokeWidth={2}/> : <Sun size={18} color="#F59E0B" strokeWidth={2}/>}
+            </span>
+            <div>
+              <p style={styles.filaLabel}>Tema de la aplicación</p>
+              <p style={styles.filaSub}>{tema === "dark" ? "Modo Oscuro (Predeterminado)" : "Modo Claro"}</p>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "6px", background: t.colors.bgInput, padding: "4px", borderRadius: "10px", border: `1px solid ${t.colors.borderLight}` }}>
+            <button
+              type="button"
+              onClick={() => cambiarTema("dark")}
+              style={{
+                display: "flex", alignItems: "center", gap: "5px", padding: "6px 10px",
+                borderRadius: "8px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 700,
+                background: tema === "dark" ? t.colors.blue : "transparent",
+                color: tema === "dark" ? "#FFFFFF" : t.colors.textSecondary,
+                transition: "all 0.2s"
+              }}
+            >
+              <Moon size={13} /> Oscuro
+            </button>
+            <button
+              type="button"
+              onClick={() => cambiarTema("light")}
+              style={{
+                display: "flex", alignItems: "center", gap: "5px", padding: "6px 10px",
+                borderRadius: "8px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 700,
+                background: tema === "light" ? t.colors.blue : "transparent",
+                color: tema === "light" ? "#FFFFFF" : t.colors.textSecondary,
+                transition: "all 0.2s"
+              }}
+            >
+              <Sun size={13} /> Claro
+            </button>
+          </div>
+        </div>
+
         {opciones.map((op, i, arr) => (
           <div
             key={op.label}

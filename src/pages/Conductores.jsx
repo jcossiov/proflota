@@ -7,10 +7,12 @@ import { useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft, User, Trash2, Edit2, Save, AlertCircle, Phone,
-  MessageSquare, ShieldCheck, CheckCircle2, ChevronDown, ChevronUp, Plus
+  MessageSquare, ShieldCheck, CheckCircle2, ChevronDown, ChevronUp, Plus,
+  FileText, UploadCloud, Check, ExternalLink, Loader2
 } from "lucide-react";
 import { theme as t } from "../styles/theme";
 import { sanitizar } from "../utils/validar";
+import { useSubirArchivo } from "../hooks/useSubirArchivo";
 import ConfirmarModal from "../components/ConfirmarModal";
 import {
   WizardPantalla,
@@ -29,21 +31,27 @@ function Conductores({ conductores = [], viajes = [], onAgregar, onEditar, onEli
   const guardandoRef = useRef(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { subirArchivo, progreso, subiendo } = useSubirArchivo(mostrarToast);
 
-  // Estados del formulario Wizard
+  // Estados del formulario Wizard (3 Pasos)
   const [verForm, setVerForm] = useState(false);
-  const [pasoWizard, setPasoWizard] = useState(1); // 1 a 4
+  const [pasoWizard, setPasoWizard] = useState(1); // 1 a 3
   const [editId, setEditId] = useState(null);
 
   // Campos
   const [nombre, setNombre] = useState("");
   const [cedula, setCedula] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [correo, setCorreo] = useState("");
   const [licencia, setLicencia] = useState("");
   const [licVence, setLicVence] = useState("");
   const [catLic, setCatLic] = useState("C3");
   const [arl, setArl] = useState("");
   const [eps, setEps] = useState("");
+  const [fondoPension, setFondoPension] = useState("");
+  const [docCedula, setDocCedula] = useState("");
+  const [docRut, setDocRut] = useState("");
+  const [docBanco, setDocBanco] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   // Modal de confirmación para eliminar
@@ -102,9 +110,10 @@ function Conductores({ conductores = [], viajes = [], onAgregar, onEditar, onEli
   };
 
   const limpiar = () => {
-    setNombre(""); setCedula(""); setTelefono("");
+    setNombre(""); setCedula(""); setTelefono(""); setCorreo("");
     setLicencia(""); setLicVence(""); setCatLic("C3");
-    setArl(""); setEps("");
+    setArl(""); setEps(""); setFondoPension("");
+    setDocCedula(""); setDocRut(""); setDocBanco("");
     setEditId(null);
     setPasoWizard(1);
     setVerForm(false);
@@ -112,9 +121,11 @@ function Conductores({ conductores = [], viajes = [], onAgregar, onEditar, onEli
 
   const abrirEdicion = (c) => {
     setNombre(c.nombre || ""); setCedula(c.cedula || "");
-    setTelefono(c.telefono || ""); setLicencia(c.licencia || "");
-    setLicVence(c.licVence || ""); setCatLic(c.catLic || "C3");
-    setArl(c.arl || ""); setEps(c.eps || "");
+    setTelefono(c.telefono || ""); setCorreo(c.correo || "");
+    setLicencia(c.licencia || ""); setLicVence(c.licVence || "");
+    setCatLic(c.catLic || "C3"); setArl(c.arl || ""); setEps(c.eps || "");
+    setFondoPension(c.fondoPension || "");
+    setDocCedula(c.docCedula || ""); setDocRut(c.docRut || ""); setDocBanco(c.docBanco || "");
     setEditId(c.firestoreId);
     setPasoWizard(1);
     setVerForm(true);
@@ -153,11 +164,16 @@ function Conductores({ conductores = [], viajes = [], onAgregar, onEditar, onEli
       nombre: sanitizar(nombre).slice(0, 100),
       cedula: sanitizar(cedula).slice(0, 20),
       telefono: (telefono || "").replace(/[^0-9+\s-]/g, "").slice(0, 20),
+      correo: sanitizar(correo).slice(0, 80),
       licencia: sanitizar(licencia).slice(0, 30),
       licVence,
       catLic: sanitizar(catLic).slice(0, 5),
       arl: sanitizar(arl).slice(0, 50),
       eps: sanitizar(eps).slice(0, 50),
+      fondoPension: sanitizar(fondoPension).slice(0, 50),
+      docCedula: docCedula || "",
+      docRut: docRut || "",
+      docBanco: docBanco || "",
     };
     try {
       if (editId) {
@@ -183,14 +199,13 @@ function Conductores({ conductores = [], viajes = [], onAgregar, onEditar, onEli
   })();
 
   const ETIQUETAS_WIZARD = [
-    "Datos personales",
-    "Teléfono y contacto",
-    "Licencia de conducción",
-    "Seguridad social (ARL/EPS)"
+    "Datos Básicos",
+    "Licencias y Afiliaciones",
+    "Documentos (RUT, Cédula, Banco)"
   ];
 
   // ══════════════════════════════════════════════════════════════════════════
-  // RENDER: FORMULARIO WIZARD GUIADO (Fondo claro, max 2-3 campos por paso)
+  // RENDER: FORMULARIO WIZARD GUIADO (3 PASOS)
   // ══════════════════════════════════════════════════════════════════════════
   if (verForm) {
     return (
@@ -201,15 +216,15 @@ function Conductores({ conductores = [], viajes = [], onAgregar, onEditar, onEli
           labelVolver={pasoWizard > 1 ? "Atrás" : "Cancelar"}
         />
 
-        <WizardProgress total={4} actual={pasoWizard} etiquetas={ETIQUETAS_WIZARD} />
+        <WizardProgress total={3} actual={pasoWizard} etiquetas={ETIQUETAS_WIZARD} />
 
-        {/* ── PASO 1: DATOS PERSONALES ── */}
+        {/* ── PASO 1: DATOS BÁSICOS ── */}
         {pasoWizard === 1 && (
           <>
             <WizardBanner
               icono="👨‍✈️"
-              titulo="¿Cómo se llama el conductor?"
-              mensaje="Ingresa su nombre completo y número de cédula para identificarlo en los viajes."
+              titulo="1. Datos Básicos del Conductor"
+              mensaje="Ingresa el nombre completo, cédula de ciudadanía y celular para contacto y reportes."
             />
             <div style={stylesWz.cardWrapper}>
               <WizardCampo label="Nombre completo" obligatorio ayuda="Ej: Juan Carlos Pérez">
@@ -221,46 +236,45 @@ function Conductores({ conductores = [], viajes = [], onAgregar, onEditar, onEli
                 />
               </WizardCampo>
 
-              <WizardCampo label="Número de Cédula" ayuda="Ej: 1.023.456.789">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <WizardCampo label="Número de Cédula" obligatorio ayuda="Cédula de ciudadanía">
+                  <WizardInput
+                    type="text"
+                    placeholder="Ej: 1023456789"
+                    value={cedula}
+                    onChange={e => setCedula(e.target.value)}
+                  />
+                </WizardCampo>
+
+                <WizardCampo label="Celular / WhatsApp" obligatorio ayuda="Para enviar liquidaciones">
+                  <WizardInput
+                    type="tel"
+                    placeholder="Ej: 310 123 4567"
+                    value={telefono}
+                    onChange={e => setTelefono(e.target.value)}
+                  />
+                </WizardCampo>
+              </div>
+
+              <WizardCampo label="Correo electrónico (opcional)">
                 <WizardInput
-                  type="text"
-                  placeholder="Cédula de ciudadanía"
-                  value={cedula}
-                  onChange={e => setCedula(e.target.value)}
+                  type="email"
+                  placeholder="conductor@ejemplo.com"
+                  value={correo}
+                  onChange={e => setCorreo(e.target.value)}
                 />
               </WizardCampo>
             </div>
           </>
         )}
 
-        {/* ── PASO 2: CONTACTO Y WHATSAPP ── */}
+        {/* ── PASO 2: LICENCIAS Y AFILIACIONES ── */}
         {pasoWizard === 2 && (
           <>
             <WizardBanner
-              icono="📱"
-              titulo="Teléfono y WhatsApp del conductor"
-              mensaje="Servirá para enviarle liquidaciones semanales y reportes de viaje al instante."
-            />
-            <div style={stylesWz.cardWrapper}>
-              <WizardCampo label="Número de Celular / WhatsApp" ayuda="Ej: 310 123 4567">
-                <WizardInput
-                  type="tel"
-                  placeholder="+57 300 000 0000"
-                  value={telefono}
-                  onChange={e => setTelefono(e.target.value)}
-                />
-              </WizardCampo>
-            </div>
-          </>
-        )}
-
-        {/* ── PASO 3: LICENCIA DE CONDUCCIÓN ── */}
-        {pasoWizard === 3 && (
-          <>
-            <WizardBanner
               icono="🪪"
-              titulo="Licencia de Conducción"
-              mensaje="Registra el pase y su fecha de vencimiento para avisarte antes de que caduque."
+              titulo="2. Licencias y Afiliaciones"
+              mensaje="Categoría del pase, fecha de vencimiento y entidades de seguridad social (ARL y EPS)."
             />
             <div style={stylesWz.cardWrapper}>
               <WizardCampo label="Categoría de Licencia">
@@ -275,54 +289,212 @@ function Conductores({ conductores = [], viajes = [], onAgregar, onEditar, onEli
                 />
               </WizardCampo>
 
-              <WizardCampo label="Número de Licencia (opcional)">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <WizardCampo label="Número de Licencia">
+                  <WizardInput
+                    type="text"
+                    placeholder="Ej: 1023456789"
+                    value={licencia}
+                    onChange={e => setLicencia(e.target.value)}
+                  />
+                </WizardCampo>
+
+                <WizardCampo label="Fecha de vencimiento" ayuda="Te avisaremos antes de vencer">
+                  <WizardInput
+                    type="date"
+                    value={licVence}
+                    onChange={e => setLicVence(e.target.value)}
+                  />
+                </WizardCampo>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <WizardCampo label="ARL Afiliada" ayuda="Ej: Sura, Positiva, Bolívar...">
+                  <WizardInput
+                    type="text"
+                    placeholder="Nombre de la ARL"
+                    value={arl}
+                    onChange={e => setArl(e.target.value)}
+                  />
+                </WizardCampo>
+
+                <WizardCampo label="EPS Afiliada" ayuda="Ej: Sanitas, Sura, Nueva EPS...">
+                  <WizardInput
+                    type="text"
+                    placeholder="Nombre de la EPS"
+                    value={eps}
+                    onChange={e => setEps(e.target.value)}
+                  />
+                </WizardCampo>
+              </div>
+
+              <WizardCampo label="Fondo de Pensiones (opcional)">
                 <WizardInput
                   type="text"
-                  placeholder="Ej: 1023456789"
-                  value={licencia}
-                  onChange={e => setLicencia(e.target.value)}
-                />
-              </WizardCampo>
-
-              <WizardCampo label="Fecha de vencimiento de la licencia" ayuda="Te alertaremos 30 días antes">
-                <WizardInput
-                  type="date"
-                  value={licVence}
-                  onChange={e => setLicVence(e.target.value)}
+                  placeholder="Ej: Porvenir, Protección, Colfondos..."
+                  value={fondoPension}
+                  onChange={e => setFondoPension(e.target.value)}
                 />
               </WizardCampo>
             </div>
           </>
         )}
 
-        {/* ── PASO 4: SEGURIDAD SOCIAL (ARL Y EPS) ── */}
-        {pasoWizard === 4 && (
+        {/* ── PASO 3: DOCUMENTOS (RUT, CÉDULA, BANCO) ── */}
+        {pasoWizard === 3 && (
           <>
             <WizardBanner
-              icono="🏥"
-              titulo="Seguridad Social (Opcional)"
-              mensaje="Empresas de ARL y EPS en las que está afiliado para control de planillas."
+              icono="📁"
+              titulo="3. Documentos Obligatorios"
+              mensaje="Adjunta los documentos del conductor en PDF o imagen para tener el expediente al día."
             />
             <div style={stylesWz.cardWrapper}>
-              <WizardCampo label="ARL Afiliada" ayuda="Ej: Sura, Positiva, Colmena, Bolívar...">
-                <WizardInput
-                  type="text"
-                  placeholder="Nombre de la ARL"
-                  value={arl}
-                  onChange={e => setArl(e.target.value)}
-                />
-              </WizardCampo>
 
-              <WizardCampo label="EPS Afiliada" ayuda="Ej: Salud Total, Sanitas, Nueva EPS, Sura...">
-                <WizardInput
-                  type="text"
-                  placeholder="Nombre de la EPS"
-                  value={eps}
-                  onChange={e => setEps(e.target.value)}
-                />
-              </WizardCampo>
+              {/* Documento 1: Cédula */}
+              <div style={{ background: "#F8FAFC", border: "1.5px solid #E2E8F0", borderRadius: "14px", padding: "14px", marginBottom: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <FileText size={18} color="#2563EB" />
+                    <div>
+                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#1E293B", display: "block" }}>
+                        Cédula de Ciudadanía
+                      </span>
+                      <span style={{ fontSize: "12px", color: "#64748B" }}>
+                        PDF o Foto por ambos lados
+                      </span>
+                    </div>
+                  </div>
+                  {docCedula && (
+                    <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 700, color: "#10B981" }}>
+                      <Check size={14} /> Adjunta
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <label style={{
+                    flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                    padding: "10px 14px", background: "#EFF6FF", border: "1.5px dashed #93C5FD",
+                    borderRadius: "10px", fontSize: "13px", fontWeight: 700, color: "#2563EB", cursor: "pointer"
+                  }}>
+                    {subiendo["cedula"] ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                    <span>{subiendo["cedula"] ? `Subiendo (${progreso["cedula"] || 0}%)...` : docCedula ? "Reemplazar Cédula" : "Subir Cédula (PDF/Imagen)"}</span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      style={{ display: "none" }}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          subirArchivo(file, `conductores/${Date.now()}_cedula_${file.name}`, "cedula", (url) => setDocCedula(url));
+                        }
+                      }}
+                    />
+                  </label>
+                  {docCedula && (
+                    <a href={docCedula} target="_blank" rel="noreferrer" style={{ padding: "10px", background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "10px", color: "#2563EB", display: "flex", alignItems: "center" }}>
+                      <ExternalLink size={16} />
+                    </a>
+                  )}
+                </div>
+              </div>
 
-              <div style={{ marginTop: "24px" }}>
+              {/* Documento 2: RUT */}
+              <div style={{ background: "#F8FAFC", border: "1.5px solid #E2E8F0", borderRadius: "14px", padding: "14px", marginBottom: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <FileText size={18} color="#059669" />
+                    <div>
+                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#1E293B", display: "block" }}>
+                        RUT (Registro Único Tributario)
+                      </span>
+                      <span style={{ fontSize: "12px", color: "#64748B" }}>
+                        PDF actualizado DIAN
+                      </span>
+                    </div>
+                  </div>
+                  {docRut && (
+                    <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 700, color: "#10B981" }}>
+                      <Check size={14} /> Adjunto
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <label style={{
+                    flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                    padding: "10px 14px", background: "#F0FDF4", border: "1.5px dashed #86EFAC",
+                    borderRadius: "10px", fontSize: "13px", fontWeight: 700, color: "#059669", cursor: "pointer"
+                  }}>
+                    {subiendo["rut"] ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                    <span>{subiendo["rut"] ? `Subiendo (${progreso["rut"] || 0}%)...` : docRut ? "Reemplazar RUT" : "Subir RUT (PDF/Imagen)"}</span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      style={{ display: "none" }}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          subirArchivo(file, `conductores/${Date.now()}_rut_${file.name}`, "rut", (url) => setDocRut(url));
+                        }
+                      }}
+                    />
+                  </label>
+                  {docRut && (
+                    <a href={docRut} target="_blank" rel="noreferrer" style={{ padding: "10px", background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "10px", color: "#059669", display: "flex", alignItems: "center" }}>
+                      <ExternalLink size={16} />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Documento 3: Certificación Bancaria */}
+              <div style={{ background: "#F8FAFC", border: "1.5px solid #E2E8F0", borderRadius: "14px", padding: "14px", marginBottom: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <FileText size={18} color="#D97706" />
+                    <div>
+                      <span style={{ fontSize: "14px", fontWeight: 700, color: "#1E293B", display: "block" }}>
+                        Certificación Bancaria
+                      </span>
+                      <span style={{ fontSize: "12px", color: "#64748B" }}>
+                        Para pago de fletes y liquidaciones
+                      </span>
+                    </div>
+                  </div>
+                  {docBanco && (
+                    <span style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "12px", fontWeight: 700, color: "#10B981" }}>
+                      <Check size={14} /> Adjunta
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <label style={{
+                    flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                    padding: "10px 14px", background: "#FFFBEB", border: "1.5px dashed #FCD34D",
+                    borderRadius: "10px", fontSize: "13px", fontWeight: 700, color: "#D97706", cursor: "pointer"
+                  }}>
+                    {subiendo["banco"] ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                    <span>{subiendo["banco"] ? `Subiendo (${progreso["banco"] || 0}%)...` : docBanco ? "Reemplazar Certificado" : "Subir Certificación Bancaria"}</span>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      style={{ display: "none" }}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          subirArchivo(file, `conductores/${Date.now()}_banco_${file.name}`, "banco", (url) => setDocBanco(url));
+                        }
+                      }}
+                    />
+                  </label>
+                  {docBanco && (
+                    <a href={docBanco} target="_blank" rel="noreferrer" style={{ padding: "10px", background: "#FFFFFF", border: "1px solid #CBD5E1", borderRadius: "10px", color: "#D97706", display: "flex", alignItems: "center" }}>
+                      <ExternalLink size={16} />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ marginTop: "16px" }}>
                 <button
                   type="button"
                   onClick={guardar}
@@ -344,10 +516,10 @@ function Conductores({ conductores = [], viajes = [], onAgregar, onEditar, onEli
         )}
 
         {/* Navegación inferior */}
-        {pasoWizard < 4 && (
+        {pasoWizard < 3 && (
           <WizardNav
             pasoActual={pasoWizard}
-            totalPasos={4}
+            totalPasos={3}
             onAtras={() => setPasoWizard(p => p - 1)}
             onSiguiente={() => setPasoWizard(p => p + 1)}
             deshabilitarSiguiente={!pasoValido}
