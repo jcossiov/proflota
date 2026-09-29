@@ -69,16 +69,16 @@ function Layout({ children }) {
               {/* Indicador de pestaña activa */}
               <span style={{
                 ...styles.navIndicador,
-                background: activo ? "#2563EB" : "transparent",
+                background: activo ? t.colors.blue : "transparent",
               }} />
               <tab.Icono
                 size={22}
-                color={activo ? "#2563EB" : "#64748B"}
+                color={activo ? t.colors.blueText : t.colors.textTertiary}
                 strokeWidth={activo ? 2.5 : 1.8}
               />
               <span style={{
                 ...styles.navLabel,
-                color: activo ? "#2563EB" : "#64748B",
+                color: activo ? t.colors.blueText : t.colors.textTertiary,
                 fontWeight: activo ? "800" : "600",
               }}>
                 {tab.label}
@@ -98,13 +98,13 @@ const styles = {
     margin: "0 auto",
     minHeight: "100vh",
     position: "relative",
-    background: "#EEF4FF",
+    background: t.colors.bgPrimary,
   },
   bannerOffline: {
     position: "sticky",
     top: 0,
     zIndex: 999,
-    background: "#DC2626",
+    background: t.colors.red,
     color: "#FFFFFF",
     padding: "8px 12px",
     fontSize: "12px",
@@ -113,7 +113,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     gap: "8px",
-    boxShadow: "0 2px 8px rgba(220,38,38,0.3)",
+    boxShadow: "0 2px 8px rgba(239,68,68,0.3)",
   },
   pantalla: {
     paddingBottom: "84px",
@@ -125,13 +125,13 @@ const styles = {
     transform: "translateX(-50%)",
     width: "100%",
     maxWidth: "480px",
-    background: "rgba(255, 255, 255, 0.96)",
+    background: "rgba(15, 35, 64, 0.96)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    borderTop: "1px solid #E2E8F0",
+    borderTop: `1px solid ${t.colors.borderLight}`,
     display: "flex",
     zIndex: 100,
-    boxShadow: "0 -4px 16px rgba(0,0,0,0.06)",
+    boxShadow: "0 -4px 16px rgba(0,0,0,0.35)",
     paddingBottom: "env(safe-area-inset-bottom, 6px)",
   },
   navBtn: {

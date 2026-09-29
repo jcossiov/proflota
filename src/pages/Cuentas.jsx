@@ -239,10 +239,10 @@ function Cuentas({ vehiculos = [], viajes = [], gastosFijos = [], gastosVehiculo
               onClick={() => setTabActivo(tab.id)}
               style={{
                 ...styles.tabBoton,
-                background: activo ? "#2563EB" : "#FFFFFF",
-                color: activo ? "#FFFFFF" : "#4B5563",
-                borderColor: activo ? "#2563EB" : "#E2E8F0",
-                boxShadow: activo ? "0 2px 8px rgba(37,99,235,0.25)" : "none",
+                background: activo ? t.colors.blue : t.colors.bgCard,
+                color: activo ? "#FFFFFF" : t.colors.textSecondary,
+                borderColor: activo ? t.colors.blue : t.colors.border,
+                boxShadow: activo ? "0 2px 8px rgba(21,101,255,0.35)" : "none",
               }}
             >
               {tab.icon}
@@ -526,7 +526,7 @@ const styles = {
     maxWidth: "480px", 
     margin: "0 auto", 
     minHeight: "100vh", 
-    background: "#EEF4FF", 
+    background: t.colors.bgPrimary, 
     paddingBottom: "40px" 
   },
   header: { 
@@ -534,12 +534,12 @@ const styles = {
     justifyContent: "space-between", 
     alignItems: "center", 
     padding: "20px 18px 16px", 
-    background: "#FFFFFF", 
-    borderBottom: "1px solid #E2E8F0" 
+    background: t.colors.bgCard, 
+    borderBottom: `1px solid ${t.colors.borderLight}` 
   },
   headerSub: { 
     fontSize: "12px", 
-    color: "#6B7280", 
+    color: t.colors.textSecondary, 
     margin: "0 0 2px", 
     fontWeight: "700", 
     textTransform: "uppercase", 
@@ -548,7 +548,7 @@ const styles = {
   titulo: { 
     fontSize: "24px", 
     fontWeight: "900", 
-    color: "#0F172A", 
+    color: t.colors.textPrimary, 
     margin: 0, 
     letterSpacing: "-0.5px" 
   },
@@ -557,27 +557,27 @@ const styles = {
     alignItems: "center", 
     gap: "6px", 
     padding: "8px 12px", 
-    background: "#EFF6FF", 
-    border: "1.5px solid #BFDBFE", 
-    borderRadius: "10px", 
+    background: t.colors.blueSoft, 
+    border: `1.5px solid ${t.colors.blueBorder}`, 
+    borderRadius: t.radius.sm, 
     fontSize: "13px", 
     fontWeight: "700", 
-    color: "#1E40AF", 
+    color: t.colors.blueText, 
     cursor: "pointer" 
   },
   navMes: { 
     display: "flex", 
     justifyContent: "space-between", 
     alignItems: "center", 
-    background: "#FFFFFF", 
-    borderBottom: "1px solid #E2E8F0", 
+    background: t.colors.bgCard, 
+    borderBottom: `1px solid ${t.colors.borderLight}`, 
     padding: "10px 20px" 
   },
   btnMes: { 
     background: "none", 
     border: "none", 
     fontSize: "24px", 
-    color: "#2563EB", 
+    color: t.colors.blueText, 
     cursor: "pointer", 
     padding: "4px 12px", 
     fontWeight: "bold" 
@@ -585,7 +585,7 @@ const styles = {
   labelMes: { 
     fontSize: "16px", 
     fontWeight: "800", 
-    color: "#1E293B", 
+    color: t.colors.textPrimary, 
     margin: 0 
   },
   tabsContenedor: {
@@ -611,13 +611,13 @@ const styles = {
     padding: "12px 16px" 
   },
   gananciaHero: { 
-    borderRadius: "18px", 
+    borderRadius: t.radius.lg, 
     padding: "22px 20px", 
     marginBottom: "14px", 
     display: "flex", 
     justifyContent: "space-between", 
     alignItems: "center", 
-    boxShadow: "0 10px 25px -5px rgba(0,0,0,0.12)" 
+    boxShadow: t.shadows.card 
   },
   gananciaHeroLabel: { 
     fontSize: "13px", 
@@ -653,15 +653,15 @@ const styles = {
     marginBottom: "14px" 
   },
   metricaCard: { 
-    background: "#FFFFFF", 
-    borderRadius: "14px", 
+    background: t.colors.bgCard, 
+    borderRadius: t.radius.md, 
     padding: "16px", 
-    border: "1.5px solid #E2E8F0", 
-    boxShadow: "0 2px 6px rgba(0,0,0,0.04)" 
+    border: `1px solid ${t.colors.borderLight}`, 
+    boxShadow: t.shadows.card 
   },
   metricaLabel: { 
     fontSize: "12px", 
-    color: "#6B7280", 
+    color: t.colors.textSecondary, 
     margin: "0 0 6px", 
     textTransform: "uppercase", 
     fontWeight: "700", 
@@ -674,17 +674,17 @@ const styles = {
     fontVariantNumeric: "tabular-nums" 
   },
   card: { 
-    background: "#FFFFFF", 
-    borderRadius: "16px", 
+    background: t.colors.bgCard, 
+    borderRadius: t.radius.lg, 
     padding: "18px", 
     marginBottom: "14px", 
-    border: "1.5px solid #E2E8F0", 
-    boxShadow: "0 2px 8px rgba(0,0,0,0.04)" 
+    border: `1px solid ${t.colors.borderLight}`, 
+    boxShadow: t.shadows.card 
   },
   cardTitulo: { 
     fontSize: "13px", 
     fontWeight: "800", 
-    color: "#4B5563", 
+    color: t.colors.textSecondary, 
     textTransform: "uppercase", 
     letterSpacing: "0.06em", 
     margin: "0 0 16px" 
@@ -694,11 +694,11 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     padding: "10px 0",
-    borderBottom: "1px solid #F3F4F6",
+    borderBottom: `1px solid ${t.colors.borderLight}`,
   },
   filaLabel: {
     fontSize: "14px",
-    color: "#4B5563",
+    color: t.colors.textSecondary,
     fontWeight: "600",
   },
   filaVal: {
@@ -723,7 +723,7 @@ const styles = {
   graficaVal: {
     fontSize: "10px",
     fontWeight: "700",
-    color: "#4B5563",
+    color: t.colors.textSecondary,
     marginBottom: "4px",
   },
   graficaBarraWrap: { 
@@ -748,7 +748,7 @@ const styles = {
   inputLabel: {
     fontSize: "12px",
     fontWeight: "700",
-    color: "#4B5563",
+    color: t.colors.textSecondary,
     display: "block",
     marginBottom: "4px",
   },
@@ -756,10 +756,10 @@ const styles = {
     width: "100%",
     boxSizing: "border-box",
     padding: "12px",
-    borderRadius: "10px",
-    border: "1.5px solid #D1D5DB",
-    background: "#F9FAFB",
-    color: "#111827",
+    borderRadius: t.radius.sm,
+    border: `1.5px solid ${t.colors.border}`,
+    background: t.colors.bgSection,
+    color: t.colors.textPrimary,
     fontSize: "14px",
     fontWeight: "600",
   },
