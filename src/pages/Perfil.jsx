@@ -4,13 +4,15 @@
  */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Lock, Save, Users, Settings, HelpCircle, Info, LogOut, ChevronUp, ChevronRight, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, User, Lock, Save, Users, Settings, HelpCircle, Info, LogOut, ChevronUp, ChevronRight, Eye, EyeOff, Moon, Sun } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useTheme } from "../hooks/useTheme";
 import { theme as t } from "../styles/theme";
 
 function Perfil({ mostrarToast }) {
   const navigate  = useNavigate();
   const { usuario, cerrarSesion, cambiarNombre, cambiarContrasena } = useAuth();
+  const { tema, esOscuro, toggleTema } = useTheme();
 
   const [nombre,         setNombre]         = useState(usuario?.displayName || "");
   const [guardandoNom,   setGuardandoNom]   = useState(false);
@@ -228,6 +230,35 @@ function Perfil({ mostrarToast }) {
         {/* MÁS */}
         <p style={styles.seccionTitulo}>Más</p>
         <div style={styles.card}>
+          {/* Alternador de Modo Oscuro / Modo Claro */}
+          <div
+            style={{...styles.filaMenu, borderBottom:`1px solid ${t.colors.borderLight}`, cursor: "pointer"}}
+            onClick={() => {
+              const nuevo = toggleTema();
+              mostrarToast(nuevo === "dark" ? "Modo Oscuro activado" : "Modo Claro activado", "info");
+            }}
+          >
+            <div style={styles.filaIzq}>
+              <div style={{...styles.iconoBox, background: t.colors.blueSoft}}>
+                {esOscuro ? <Moon size={16} color={t.colors.blueText} strokeWidth={2}/> : <Sun size={16} color={t.colors.blueText} strokeWidth={2}/>}
+              </div>
+              <div>
+                <p style={styles.filaLabel}>Tema visual</p>
+                <p style={styles.filaSub}>{esOscuro ? "Modo Oscuro (Navira)" : "Modo Claro (Navira Ice)"}</p>
+              </div>
+            </div>
+            <span style={{
+              fontSize: "12px",
+              fontWeight: t.fonts.weightBold,
+              color: t.colors.blueText,
+              background: t.colors.blueSoft,
+              padding: "4px 10px",
+              borderRadius: t.radius.full,
+            }}>
+              {esOscuro ? "🌙 Oscuro" : "☀️ Claro"}
+            </span>
+          </div>
+
           {[
             {label:"Configuración",   sub:"Preferencias y datos",  ruta:"/configuracion", Icono:Settings},
             {label:"Ayuda y soporte", sub:"Contáctanos",           ruta:"/ayuda",         Icono:HelpCircle},
