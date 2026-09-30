@@ -118,6 +118,11 @@ function Calculadora({ vehiculos, viajes, rutas = [], peajes = [], conductores =
   const [nombreRuta,       setNombreRuta]         = useState("");
   const [mostrarGuardar,   setMostrarGuardar]     = useState(false);
   const [rutaCargada,      setRutaCargada]        = useState(null);
+  const [guardarComoFrecuente, setGuardarComoFrecuente] = useState(false);
+  const [nombreRutaFrecuente, setNombreRutaFrecuente]   = useState("");
+  const [nombrePeajeManual,   setNombrePeajeManual]     = useState("");
+  const [tarifaPeajeManual,   setTarifaPeajeManual]     = useState("");
+  const [modoPeajeManual,     setModoPeajeManual]       = useState(false);
   const [secDatos,         setSecDatos]           = useState(true);
   const [secComb,          setSecComb]            = useState(false);
   const [secPeajes,        setSecPeajes]          = useState(false);
@@ -307,7 +312,29 @@ function Calculadora({ vehiculos, viajes, rutas = [], peajes = [], conductores =
     setNuevoNom(""); setNuevoVal("");
   };
 
-  const guardarViaje = async () => {
+  const agregarPeajeManual = () => {
+    if (!nombrePeajeManual.trim() || !n(tarifaPeajeManual)) {
+      if (mostrarToast) mostrarToast("Ingresa el nombre y la tarifa del peaje", "error");
+      return;
+    }
+    const nuevoId = "manual_" + Date.now();
+    const tarifaVal = n(tarifaPeajeManual);
+    const nuevoPeaje = {
+      c: nuevoId,
+      n: nombrePeajeManual.trim(),
+      d: "Peaje Manual",
+      iv: false,
+      t: { [categoria || "VII"]: tarifaVal },
+      tarifa: tarifaVal
+    };
+    setPeajesRuta([...peajesRuta, nuevoPeaje]);
+    setNombrePeajeManual("");
+    setTarifaPeajeManual("");
+    setModoPeajeManual(false);
+    if (mostrarToast) mostrarToast(`✓ Peaje "${nuevoPeaje.n}" agregado (${fmt(tarifaVal)})`, "info");
+  };
+
+  const guardarViaje = async (guardarTambienFrecuente = false) => {
     if (guardandoRef.current) return;
     if (!ruta.trim())  { mostrarToast("Ingresa la ruta del viaje","error"); return; }
     if (!valorViaje)   { mostrarToast("Ingresa tonelaje y flete","error"); return; }
@@ -315,36 +342,88 @@ function Calculadora({ vehiculos, viajes, rutas = [], peajes = [], conductores =
     guardandoRef.current = true;
     setGuardando(true);
     try {
-
-  // Auto-registrar empresa nueva en el directorio invisible (opción B)
-    if (empresa.trim() && nitEmpresa.trim() && onAgregarEmpresa) {
-      const yaExiste = empresas.some(e =>
-        (e.razonSocial || e.nombre || "").trim().toLowerCase() === empresa.trim().toLowerCase()
-      );
-      if (!yaExiste) {
-        onAgregarEmpresa({
-          razonSocial: empresa.trim(),
-          nit: nitEmpresa.trim(),
-          tipo: "cliente",
-          ciudad: "", contacto: "", telefono: "", correo: "",
-        }).catch(() => {}); // silencioso, no interrumpe el guardado del viaje
+      // Guardar también como ruta frecuente si fue seleccionado
+      if ((guardarComoFrecuente || guardarTambienFrecuente) && onGuardarRuta) {
+        try {
+          const nomFinal = (nombreRutaFrecuente || "").trim() || (origen && destino ? `${origen} → ${destino}` : (nombreRuta || ruta).trim());
+          await onGuardarRuta({
+            tipoCarga: sanitizar(tipoCarga),
+            nombre: sanitizar(nomFinal),
+            ruta: sanitizar(origen && destino ? `${origen} → ${destino}` : (ruta || nomFinal)),
+            origen: sanitizar(origen),
+            destino: sanitizar(destino),
+            kmCargado: n(kmCargado),
+            kmVacio: n(kmVacio),
+            tonelaje: n(tonelaje),
+            modoFlete,
+            fleteTon: n(fleteTon),
+            rendCargado: n(rendCargado),
+            rendVacio: n(rendVacio),
+            galManual: n(galManual),
+            modoComb,
+            precioAcpm: n(precioAcpm),
+            precioAdblue: n(precioAdblue),
+            peajesRuta: peajesRuta.map(p => ({
+              c: p.c, n: p.n, d: p.d, iv: p.iv || false,
+              tarifa: p.t ? obtenerTarifa(p, categoria) : (p.tarifa || 0),
+              t: p.t || {}
+            })),
+            categoria,
+            producto: sanitizar(producto),
+            empresa: sanitizar(empresa),
+            nitEmpresa: sanitizar(nitEmpresa),
+            conductor: sanitizar(conductor),
+            placa: sanitizar(placa),
+            modoConductor,
+            porcCond: n(porcCond),
+            carpado: n(carpado),
+            gastosViaje: n(gastosViaje),
+            extrasList: extras,
+            descRetefuente,
+            pctRetefuente,
+            descReteica,
+            pctReteica,
+            descFopat,
+            pctFopat,
+            descOtro,
+            pctOtro,
+            nombreOtro,
+            pctAnticipoFlete: n(pctAnticipoFlete),
+            pctAnticipoFleteRet: n(pctAnticipoFleteRet),
+          });
+        } catch (errRuta) {
+          console.error("Error guardando ruta frecuente complementaria:", errRuta);
+        }
       }
-  // Auto-registrar empresa de retorno nueva en el directorio
-    if (empresaRet.trim() && nitEmpresaRet.trim() && onAgregarEmpresa) {
-      const yaExisteRet = empresas.some(e =>
-        (e.razonSocial || e.nombre || "").trim().toLowerCase() === empresaRet.trim().toLowerCase()
-      );
-      if (!yaExisteRet) {
-        onAgregarEmpresa({
-          razonSocial: empresaRet.trim(),
-          nit: nitEmpresaRet.trim(),
-          tipo: "cliente",
-          ciudad: "", contacto: "", telefono: "", correo: "",
-        }).catch(() => {});
-      }
-    }
 
-    }
+      // Auto-registrar empresa nueva en el directorio invisible (opción B)
+      if (empresa.trim() && nitEmpresa.trim() && onAgregarEmpresa) {
+        const yaExiste = empresas.some(e =>
+          (e.razonSocial || e.nombre || "").trim().toLowerCase() === empresa.trim().toLowerCase()
+        );
+        if (!yaExiste) {
+          onAgregarEmpresa({
+            razonSocial: empresa.trim(),
+            nit: nitEmpresa.trim(),
+            tipo: "cliente",
+            ciudad: "", contacto: "", telefono: "", correo: "",
+          }).catch(() => {}); // silencioso, no interrumpe el guardado del viaje
+        }
+      }
+      // Auto-registrar empresa de retorno nueva en el directorio
+      if (empresaRet.trim() && nitEmpresaRet.trim() && onAgregarEmpresa) {
+        const yaExisteRet = empresas.some(e =>
+          (e.razonSocial || e.nombre || "").trim().toLowerCase() === empresaRet.trim().toLowerCase()
+        );
+        if (!yaExisteRet) {
+          onAgregarEmpresa({
+            razonSocial: empresaRet.trim(),
+            nit: nitEmpresaRet.trim(),
+            tipo: "cliente",
+            ciudad: "", contacto: "", telefono: "", correo: "",
+          }).catch(() => {});
+        }
+      }
       await onGuardar({
         fecha, fechaDescarga, mani: sanitizar(mani), placa, tipoCarga, prod: sanitizar(producto),
         ruta: sanitizar(ruta), emp: sanitizar(empresa), nitEmpresa: nitEmpresa.trim(), condNom: sanitizar(conductor),
@@ -451,114 +530,155 @@ function Calculadora({ vehiculos, viajes, rutas = [], peajes = [], conductores =
   };
 
   const cargarRuta = (rutaGuardada) => {
-  setTipoCarga(rutaGuardada.tipoCarga || "");
-  setRuta(rutaGuardada.ruta);
-  setKmCargado(rutaGuardada.kmCargado || "");
-  setKmVacio(rutaGuardada.kmVacio || "");
-  setModoFlete(rutaGuardada.modoFlete || "");
-  setFleteTon(rutaGuardada.fleteTon || "");
-  setRendCargado(rutaGuardada.rendCargado || "");
-  setRendVacio(rutaGuardada.rendVacio || "");
-  setGalManual(rutaGuardada.galManual || "");
-  setModoComb(rutaGuardada.modoComb || "");
-  if (rutaGuardada.precioAcpm)   setPrecioAcpm(rutaGuardada.precioAcpm);
-  if (rutaGuardada.precioAdblue) setPrecioAdblue(rutaGuardada.precioAdblue);
-  setCategoria(rutaGuardada.categoria || "VII");
-  setPeajesRuta((rutaGuardada.peajesRuta || []).map(p => ({
-    c: p.c, n: p.n, d: p.d, iv: p.iv || false,
-    t: { [rutaGuardada.categoria || "VII"]: p.tarifa || 0 },
-  })));
-  // Datos adicionales
-  if (rutaGuardada.producto)        setProducto(rutaGuardada.producto);
-  if (rutaGuardada.empresa)         setEmpresa(rutaGuardada.empresa);
-  if (rutaGuardada.conductor)       setConductor(rutaGuardada.conductor);
-  if (rutaGuardada.lugarCargue)     setLugarCargue(rutaGuardada.lugarCargue);
-  if (rutaGuardada.lugarDescargue)  setLugarDescargue(rutaGuardada.lugarDescargue);
-  if (rutaGuardada.modoConductor)   setModoConductor(rutaGuardada.modoConductor);
-  if (rutaGuardada.porcCond)        setPorcCond(rutaGuardada.porcCond);
-  if (rutaGuardada.carpado)         setCarpado(rutaGuardada.carpado);
-  if (rutaGuardada.gastosViaje)     setGastosViaje(rutaGuardada.gastosViaje);
-  if (rutaGuardada.extrasList)      setExtras(rutaGuardada.extrasList);
+    if (!rutaGuardada) return;
+    setTipoCarga(rutaGuardada.tipoCarga || "");
+    setRuta(rutaGuardada.ruta || "");
+
+    // Origen y Destino independientes
+    if (rutaGuardada.origen && rutaGuardada.destino) {
+      setOrigen(rutaGuardada.origen);
+      setDestino(rutaGuardada.destino);
+    } else if (rutaGuardada.ruta) {
+      const partes = rutaGuardada.ruta.split(/→|-/).map(s => s.trim());
+      if (partes.length >= 2) {
+        setOrigen(partes[0]);
+        setDestino(partes[1]);
+      } else {
+        setOrigen(rutaGuardada.ruta);
+        setDestino("");
+      }
+    }
+
+    setKmCargado(rutaGuardada.kmCargado ? String(rutaGuardada.kmCargado) : "");
+    setKmVacio(rutaGuardada.kmVacio ? String(rutaGuardada.kmVacio) : "");
+    if (rutaGuardada.tonelaje) setTonelaje(String(rutaGuardada.tonelaje));
+    if (rutaGuardada.modoFlete) setModoFlete(rutaGuardada.modoFlete);
+    if (rutaGuardada.fleteTon) setFleteTon(String(rutaGuardada.fleteTon));
+    if (rutaGuardada.rendCargado) setRendCargado(String(rutaGuardada.rendCargado));
+    if (rutaGuardada.rendVacio) setRendVacio(String(rutaGuardada.rendVacio));
+    if (rutaGuardada.galManual) setGalManual(String(rutaGuardada.galManual));
+    if (rutaGuardada.modoComb) setModoComb(rutaGuardada.modoComb);
+    if (rutaGuardada.precioAcpm) setPrecioAcpm(String(rutaGuardada.precioAcpm));
+    if (rutaGuardada.precioAdblue) setPrecioAdblue(String(rutaGuardada.precioAdblue));
+    if (rutaGuardada.categoria) setCategoria(rutaGuardada.categoria || "VII");
+
+    // Peajes detallados
+    if (Array.isArray(rutaGuardada.peajesRuta)) {
+      setPeajesRuta(rutaGuardada.peajesRuta.map(p => ({
+        c: p.c,
+        n: p.n,
+        d: p.d,
+        iv: p.iv || false,
+        t: p.t || { [rutaGuardada.categoria || "VII"]: p.tarifa || 0 },
+        tarifa: p.tarifa || 0
+      })));
+    }
+
+    // Datos de carga, empresa y conductor
+    if (rutaGuardada.producto) setProducto(rutaGuardada.producto);
+    if (rutaGuardada.empresa) setEmpresa(rutaGuardada.empresa);
+    if (rutaGuardada.nitEmpresa) setNitEmpresa(rutaGuardada.nitEmpresa);
+    if (rutaGuardada.conductor) setConductor(rutaGuardada.conductor);
+    if (rutaGuardada.placa) setPlaca(rutaGuardada.placa);
+    if (rutaGuardada.lugarCargue) setLugarCargue(rutaGuardada.lugarCargue);
+    if (rutaGuardada.lugarDescargue) setLugarDescargue(rutaGuardada.lugarDescargue);
+    if (rutaGuardada.modoConductor) setModoConductor(rutaGuardada.modoConductor);
+    if (rutaGuardada.porcCond) setPorcCond(String(rutaGuardada.porcCond));
+    if (rutaGuardada.carpado !== undefined) setCarpado(String(rutaGuardada.carpado));
+    if (rutaGuardada.gastosViaje !== undefined) setGastosViaje(String(rutaGuardada.gastosViaje));
+    if (rutaGuardada.extrasList) setExtras(rutaGuardada.extrasList);
+
     // Descuentos de ley
-  if (rutaGuardada.descRetefuente !== undefined) setDescRetefuente(rutaGuardada.descRetefuente);
-  if (rutaGuardada.pctRetefuente)   setPctRetefuente(rutaGuardada.pctRetefuente);
-  if (rutaGuardada.descReteica !== undefined) setDescReteica(rutaGuardada.descReteica);
-  if (rutaGuardada.pctReteica)      setPctReteica(rutaGuardada.pctReteica);
-  if (rutaGuardada.descFopat !== undefined) setDescFopat(rutaGuardada.descFopat);
-  if (rutaGuardada.pctFopat)        setPctFopat(rutaGuardada.pctFopat);
-  if (rutaGuardada.descOtro !== undefined) setDescOtro(rutaGuardada.descOtro);
-  if (rutaGuardada.pctOtro)    setPctOtro(rutaGuardada.pctOtro);
-  if (rutaGuardada.nombreOtro) setNombreOtro(rutaGuardada.nombreOtro);
-  if (rutaGuardada.pctAnticipoFlete !== undefined) setPctAnticipoFlete(String(rutaGuardada.pctAnticipoFlete));
-  if (rutaGuardada.pctAnticipoFleteRet !== undefined) setPctAnticipoFleteRet(String(rutaGuardada.pctAnticipoFleteRet));
-  setMostrarRutas(false);
+    if (rutaGuardada.descRetefuente !== undefined) setDescRetefuente(rutaGuardada.descRetefuente);
+    if (rutaGuardada.pctRetefuente) setPctRetefuente(rutaGuardada.pctRetefuente);
+    if (rutaGuardada.descReteica !== undefined) setDescReteica(rutaGuardada.descReteica);
+    if (rutaGuardada.pctReteica) setPctReteica(rutaGuardada.pctReteica);
+    if (rutaGuardada.descFopat !== undefined) setDescFopat(rutaGuardada.descFopat);
+    if (rutaGuardada.pctFopat) setPctFopat(rutaGuardada.pctFopat);
+    if (rutaGuardada.descOtro !== undefined) setDescOtro(rutaGuardada.descOtro);
+    if (rutaGuardada.pctOtro) setPctOtro(rutaGuardada.pctOtro);
+    if (rutaGuardada.nombreOtro) setNombreOtro(rutaGuardada.nombreOtro);
+    if (rutaGuardada.pctAnticipoFlete !== undefined) setPctAnticipoFlete(String(rutaGuardada.pctAnticipoFlete));
+    if (rutaGuardada.pctAnticipoFleteRet !== undefined) setPctAnticipoFleteRet(String(rutaGuardada.pctAnticipoFleteRet));
 
-  setRutaCargada(rutaGuardada.nombre);
-  setMostrarRutas(false);
-};
-
-const guardarRutaFrecuente = async () => {
-  if (guardandoRutaRef.current || guardandoRuta) return;
-  if (!ruta.trim()) { mostrarToast("Ingresa la ruta del viaje primero","error"); return; }
-  guardandoRutaRef.current = true;
-  setGuardandoRuta(true);
-
-  const datos = {
-    tipoCarga:   sanitizar(tipoCarga),
-    nombre:      sanitizar(nombreRuta.trim() || ruta.trim()),
-    ruta:        sanitizar(ruta),
-    kmCargado:   n(kmCargado),
-    kmVacio:     n(kmVacio),
-    modoFlete:   modoFlete,
-    fleteTon:    n(fleteTon),
-    rendCargado: n(rendCargado),
-    rendVacio:   n(rendVacio),
-    galManual:   n(galManual),
-    modoComb:    modoComb,
-    precioAcpm:  n(precioAcpm),
-    precioAdblue: n(precioAdblue),
-    peajesRuta:  peajesRuta.map(p => ({
-      c: p.c, n: p.n, d: p.d, iv: p.iv || false,
-      tarifa: p.t ? obtenerTarifa(p, categoria) : (p.tarifa || 0),
-    })),
-    categoria,
-    // Datos adicionales
-    producto:       sanitizar(producto),
-    empresa:        sanitizar(empresa),
-    conductor:       sanitizar(conductor),
-    lugarCargue:     sanitizar(lugarCargue),
-    lugarDescargue:  sanitizar(lugarDescargue),
-    modoConductor:   modoConductor,
-    porcCond:        n(porcCond),
-    carpado:         n(carpado),
-    gastosViaje:     n(gastosViaje),
-    extrasList:      extras,
-    // Descuentos de ley
-    descRetefuente:  descRetefuente,
-    pctRetefuente:   pctRetefuente,
-    descReteica:     descReteica,
-    pctReteica:      pctReteica,
-    descFopat:       descFopat,
-    pctFopat:        pctFopat,
-    descOtro:        descOtro,
-    pctOtro:         pctOtro,
-    nombreOtro:      nombreOtro,
-    pctAnticipoFlete: n(pctAnticipoFlete),
-    pctAnticipoFleteRet: n(pctAnticipoFleteRet),
+    setRutaCargada(rutaGuardada.nombre || rutaGuardada.ruta);
+    setMostrarRutas(false);
+    if (mostrarToast) mostrarToast(`✓ Ruta "${rutaGuardada.nombre || rutaGuardada.ruta}" cargada con éxito. Solo ajusta las fechas y confirma el viaje.`, "exito");
   };
 
-  try {
-    await onGuardarRuta(datos);
-    mostrarToast("Ruta guardada correctamente", "exito");
-    setMostrarGuardar(false);
-    setNombreRuta("");
-  } catch(err) {
-    mostrarToast("Error al guardar la ruta", "error");
-  } finally {
-    guardandoRutaRef.current = false;
-    setGuardandoRuta(false);
-  }
-};
+  const guardarRutaFrecuente = async (nombrePersonalizado = "") => {
+    if (guardandoRutaRef.current || guardandoRuta) return;
+    const nombreFinal = (nombrePersonalizado || nombreRutaFrecuente || nombreRuta || (origen && destino ? `${origen} → ${destino}` : ruta)).trim();
+    if (!nombreFinal) {
+      if (mostrarToast) mostrarToast("Ingresa la ruta o un nombre para guardarla", "error");
+      return;
+    }
+    guardandoRutaRef.current = true;
+    setGuardandoRuta(true);
+
+    const datos = {
+      tipoCarga: sanitizar(tipoCarga),
+      nombre: sanitizar(nombreFinal),
+      ruta: sanitizar(origen && destino ? `${origen} → ${destino}` : (ruta || nombreFinal)),
+      origen: sanitizar(origen),
+      destino: sanitizar(destino),
+      kmCargado: n(kmCargado),
+      kmVacio: n(kmVacio),
+      tonelaje: n(tonelaje),
+      modoFlete: modoFlete,
+      fleteTon: n(fleteTon),
+      rendCargado: n(rendCargado),
+      rendVacio: n(rendVacio),
+      galManual: n(galManual),
+      modoComb: modoComb,
+      precioAcpm: n(precioAcpm),
+      precioAdblue: n(precioAdblue),
+      peajesRuta: peajesRuta.map(p => ({
+        c: p.c,
+        n: p.n,
+        d: p.d,
+        iv: p.iv || false,
+        tarifa: p.t ? obtenerTarifa(p, categoria) : (p.tarifa || 0),
+        t: p.t || {}
+      })),
+      categoria,
+      producto: sanitizar(producto),
+      empresa: sanitizar(empresa),
+      nitEmpresa: sanitizar(nitEmpresa),
+      conductor: sanitizar(conductor),
+      placa: sanitizar(placa),
+      modoConductor: modoConductor,
+      porcCond: n(porcCond),
+      carpado: n(carpado),
+      gastosViaje: n(gastosViaje),
+      extrasList: extras,
+      descRetefuente,
+      pctRetefuente,
+      descReteica,
+      pctReteica,
+      descFopat,
+      pctFopat,
+      descOtro,
+      pctOtro,
+      nombreOtro,
+      pctAnticipoFlete: n(pctAnticipoFlete),
+      pctAnticipoFleteRet: n(pctAnticipoFleteRet),
+    };
+
+    try {
+      await onGuardarRuta(datos);
+      if (mostrarToast) mostrarToast(`✓ Ruta frecuente "${nombreFinal}" guardada con éxito`, "exito");
+      setMostrarGuardar(false);
+      setNombreRuta("");
+      setNombreRutaFrecuente("");
+    } catch(err) {
+      console.error(err);
+      if (mostrarToast) mostrarToast("Error al guardar la ruta frecuente", "error");
+    } finally {
+      guardandoRutaRef.current = false;
+      setGuardandoRuta(false);
+    }
+  };
 
 // Pre-llenar rendimiento configurado en el vehículo al seleccionar placa
   useEffect(() => {
@@ -775,6 +895,145 @@ const guardarRutaFrecuente = async () => {
         {/* ── PASO 1: Camión, Fechas y Conductor ── */}
         {subPasoWizard === 1 && (
           <WizardCard>
+            {/* Selector de Rutas Frecuentes Guardadas */}
+            {rutas.length > 0 ? (
+              <div style={{ marginBottom: "16px" }}>
+                <button
+                  type="button"
+                  onClick={() => setMostrarRutas(!mostrarRutas)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "12px 14px",
+                    background: "rgba(37, 99, 235, 0.12)",
+                    border: "1.5px dashed rgba(59, 130, 246, 0.5)",
+                    borderRadius: "12px",
+                    color: "var(--text-primary, #60A5FA)",
+                    fontSize: "13.5px",
+                    fontWeight: 700,
+                    cursor: "pointer"
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    ⭐ <span>Usar datos de una Ruta Frecuente ({rutas.length})</span>
+                  </span>
+                  {mostrarRutas ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+
+                {mostrarRutas && (
+                  <div style={{
+                    marginTop: "8px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    maxHeight: "240px",
+                    overflowY: "auto",
+                    padding: "4px"
+                  }}>
+                    {rutas.map((r) => (
+                      <div
+                        key={r.firestoreId || r.id || r.nombre}
+                        onClick={() => cargarRuta(r)}
+                        style={{
+                          textAlign: "left",
+                          padding: "10px 12px",
+                          background: "var(--card-bg, rgba(255,255,255,0.06))",
+                          border: "1.5px solid var(--border-color, rgba(255,255,255,0.12))",
+                          borderRadius: "10px",
+                          cursor: "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.08)"
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--text-primary, #F8FAFC)" }}>
+                            🛣️ {r.nombre || r.ruta}
+                          </div>
+                          <div style={{ fontSize: "11px", color: "var(--text-secondary, #94A3B8)", marginTop: "2px" }}>
+                            {r.kmCargado ? `${r.kmCargado} km cargado` : ""}
+                            {r.empresa ? ` · ${r.empresa}` : ""}
+                            {r.producto ? ` · ${r.producto}` : ""}
+                            {r.peajesRuta?.length ? ` · ${r.peajesRuta.length} peajes` : ""}
+                          </div>
+                        </div>
+                        <span style={{
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          padding: "4px 8px",
+                          background: "#2563EB",
+                          color: "#FFFFFF",
+                          borderRadius: "6px"
+                        }}>
+                          Cargar
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{
+                marginBottom: "16px",
+                padding: "10px 14px",
+                background: "rgba(37, 99, 235, 0.08)",
+                border: "1px dashed rgba(59, 130, 246, 0.35)",
+                borderRadius: "12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px"
+              }}>
+                <span style={{ fontSize: "18px" }}>⭐</span>
+                <div>
+                  <p style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-primary, #60A5FA)", margin: 0 }}>
+                    Rutas Frecuentes
+                  </p>
+                  <p style={{ fontSize: "11px", color: "var(--text-secondary, #94A3B8)", margin: 0 }}>
+                    Al finalizar tu viaje podrás guardarlo como ruta frecuente para precargar combustible y peajes con un solo clic.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {rutaCargada && (
+              <div style={{
+                background: "rgba(34, 197, 94, 0.1)",
+                border: "1.5px solid #22C55E",
+                borderRadius: "10px",
+                padding: "10px 12px",
+                marginBottom: "14px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}>
+                <div>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: "#16A34A", display: "block" }}>
+                    ✓ Ruta frecuente activa: {rutaCargada}
+                  </span>
+                  <span style={{ fontSize: "11px", color: "#64748B" }}>
+                    Kilómetros, combustible y peajes precargados
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRutaCargada(null)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#DC2626",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    cursor: "pointer"
+                  }}
+                >
+                  ✕ Quitar
+                </button>
+              </div>
+            )}
+
             <WizardCampo label="¿Qué camión va a salir?" obligatorio>
               <WizardSelect value={placa} onChange={e => setPlaca(e.target.value)}>
                 <option value="">Seleccionar vehículo...</option>
@@ -1014,16 +1273,242 @@ const guardarRutaFrecuente = async () => {
           </WizardCard>
         )}
 
-        {/* ── PASO 4: Peajes, Gastos y Pago Conductor ── */}
+        {/* ── PASO 4: Peajes Detallados, Gastos y Pago Conductor ── */}
         {subPasoWizard === 4 && (
           <WizardCard>
-            <WizardCampo label="Categoría del vehículo (peajes)">
+            {/* Categoría para peajes */}
+            <WizardCampo label="Categoría del vehículo (peajes)" ayuda="Determina la tarifa exacta en cada caseta">
               <WizardSelect value={categoria} onChange={e => setCategoria(e.target.value)}>
-                {["I","II","III","IV","V","VI","VII"].map(c=>(
-                  <option key={c} value={c}>Categoría {c}</option>
-                ))}
+                <option value="I">Cat I — Automóviles, Camperos, Camionetas</option>
+                <option value="II">Cat II — Buses y Busetas</option>
+                <option value="III">Cat III — Camiones 2 ejes pequeños</option>
+                <option value="IV">Cat IV — Camión 2 ejes grandes</option>
+                <option value="V">Cat V — Camiones 3 y 4 ejes (Doble Troque)</option>
+                <option value="VI">Cat VI — Camiones 5 ejes (Tractomula 2 troques)</option>
+                <option value="VII">Cat VII — Camiones 6+ ejes (Tractomula 3 troques)</option>
               </WizardSelect>
             </WizardCampo>
+
+            {/* Buscador y selector de Peaje */}
+            <div style={{ marginBottom: "16px" }}>
+              <p style={{ fontSize: "13.5px", fontWeight: 700, color: "#0F172A", margin: "0 0 6px" }}>
+                Agregar Peajes de la Ruta (Peaje por Peaje)
+              </p>
+
+              <WizardInput
+                type="text"
+                placeholder="🔍 Buscar peaje por nombre o departamento..."
+                value={busquedaP}
+                onChange={e => setBusquedaP(e.target.value)}
+              />
+
+              <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                <WizardSelect
+                  value={selP}
+                  onChange={e => setSelP(e.target.value)}
+                  style={{ flex: 1 }}
+                >
+                  <option value="">Seleccionar peaje de la lista...</option>
+                  {peajesFiltrados.slice(0, 100).map(p => {
+                    const tarifaCat = obtenerTarifa(p, categoria);
+                    return (
+                      <option key={p.c} value={p.c}>
+                        {p.n} ({p.d}) — ${(tarifaCat).toLocaleString("es-CO")}
+                      </option>
+                    );
+                  })}
+                </WizardSelect>
+                <button
+                  type="button"
+                  onClick={agregarPeaje}
+                  style={{
+                    padding: "0 16px",
+                    background: "#2563EB",
+                    color: "#FFFFFF",
+                    border: "none",
+                    borderRadius: "10px",
+                    fontWeight: 700,
+                    fontSize: "13px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px"
+                  }}
+                >
+                  <Plus size={16} />
+                  <span>Agregar</span>
+                </button>
+              </div>
+
+              <div style={{ marginTop: "6px", display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => setModoPeajeManual(!modoPeajeManual)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "#2563EB",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    padding: 0
+                  }}
+                >
+                  {modoPeajeManual ? "✕ Cancelar peaje manual" : "+ ¿No encuentras el peaje? Escríbelo manualmente"}
+                </button>
+              </div>
+
+              {modoPeajeManual && (
+                <div style={{
+                  marginTop: "8px",
+                  padding: "12px",
+                  background: "rgba(37, 99, 235, 0.05)",
+                  border: "1.5px dashed #3B82F6",
+                  borderRadius: "10px"
+                }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+                    <WizardInput
+                      placeholder="Nombre del peaje"
+                      value={nombrePeajeManual}
+                      onChange={e => setNombrePeajeManual(e.target.value)}
+                    />
+                    <WizardInput
+                      type="number"
+                      placeholder="Tarifa ($)"
+                      value={tarifaPeajeManual}
+                      onChange={e => setTarifaPeajeManual(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={agregarPeajeManual}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      background: "#2563EB",
+                      color: "#FFFFFF",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontWeight: 700,
+                      fontSize: "12px",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Guardar Peaje Manual
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Lista Desglosada de Peajes Agregados */}
+            <div style={{ marginBottom: "18px" }}>
+              <p style={{ fontSize: "12px", fontWeight: 700, textTransform: "uppercase", color: "#64748B", margin: "0 0 6px" }}>
+                Desglose Detallado ({peajesRuta.length} peaje{peajesRuta.length === 1 ? "" : "s"} agregado{peajesRuta.length === 1 ? "" : "s"})
+              </p>
+
+              {peajesRuta.length === 0 ? (
+                <div style={{
+                  padding: "12px",
+                  textAlign: "center",
+                  background: "rgba(0,0,0,0.02)",
+                  border: "1px dashed #CBD5E1",
+                  borderRadius: "10px",
+                  fontSize: "12.5px",
+                  color: "#64748B"
+                }}>
+                  No hay peajes agregados para esta ruta. Agrega los peajes arriba o deja vacío si no aplica.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {peajesRuta.map(p => {
+                    const tarifa = obtenerTarifa(p, categoria);
+                    const total = tarifa * (p.iv ? 2 : 1);
+                    return (
+                      <div
+                        key={p.c}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "10px 12px",
+                          background: "#FFFFFF",
+                          border: "1.5px solid #E2E8F0",
+                          borderRadius: "10px"
+                        }}
+                      >
+                        <div>
+                          <span style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", display: "block" }}>
+                            🛣️ {p.n} {p.d ? `(${p.d})` : ""}
+                          </span>
+                          <span style={{ fontSize: "11px", color: "#64748B" }}>
+                            Tarifa: {fmt(tarifa)} {p.iv ? "× 2 (Ida y vuelta)" : "(Solo ida)"}
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontSize: "13.5px", fontWeight: 800, color: "#0F172A" }}>
+                            {fmt(total)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleIV(p.c)}
+                            style={{
+                              padding: "4px 8px",
+                              fontSize: "11px",
+                              fontWeight: 700,
+                              borderRadius: "6px",
+                              border: "none",
+                              cursor: "pointer",
+                              background: p.iv ? "rgba(34, 197, 94, 0.15)" : "rgba(37, 99, 235, 0.12)",
+                              color: p.iv ? "#16A34A" : "#2563EB"
+                            }}
+                          >
+                            {p.iv ? "Ida/Vuelta" : "Ida"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => quitarP(p.c)}
+                            style={{
+                              background: "rgba(239, 68, 68, 0.1)",
+                              border: "none",
+                              color: "#EF4444",
+                              borderRadius: "6px",
+                              padding: "4px 6px",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center"
+                            }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Total Peajes Destacado */}
+              <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: "10px",
+                padding: "10px 14px",
+                background: "rgba(37, 99, 235, 0.08)",
+                border: "1.5px solid #93C5FD",
+                borderRadius: "10px"
+              }}>
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "#1E40AF" }}>
+                  Total Peajes de la Ruta:
+                </span>
+                <span style={{ fontSize: "16px", fontWeight: 900, color: "#1E40AF" }}>
+                  {fmt(totPeajes)}
+                </span>
+              </div>
+            </div>
+
+            {/* Otros gastos */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
               <WizardCampo label="Carpado / Descarpado ($)" ayuda="Dejar en 0 si no aplica">
                 <WizardInput
@@ -1043,6 +1528,7 @@ const guardarRutaFrecuente = async () => {
               </WizardCampo>
             </div>
 
+            {/* Pago conductor */}
             <WizardCampo label="¿Cómo se le paga al conductor?">
               <WizardOpciones
                 opciones={MODO_CONDUCTOR_OPCIONES}
@@ -1072,9 +1558,10 @@ const guardarRutaFrecuente = async () => {
           const galVac  = n(modoComb)==="manual" ? 0 : (n(kmVacio) / (n(rendVacio)||1));
           const galTot  = modoComb==="manual" ? n(galManual) : galCarg + galVac;
           const costoAcpm = galTot * n(precioAcpm);
+          const costoAdbl = galTot * ((n(precioAdblue) ? 0.05 : 0) * n(precioAdblue));
           const fleteTotal = modoFlete==="porTon" ? n(fleteTon)*n(tonelaje) : modoFlete==="porKm" ? n(fleteTon)*kmTotal : n(fleteTon);
           const costoConduct = modoConductor==="porcentaje" ? fleteTotal*(n(porcCond)/100) : n(porcCond);
-          const totalCostos  = costoAcpm + costoConduct + n(carpado) + n(gastosViaje);
+          const totalCostos  = costoAcpm + costoAdbl + totPeajes + costoConduct + n(carpado) + n(gastosViaje);
           const gananciaNeta = fleteTotal - totalCostos;
           const margen = fleteTotal>0 ? (gananciaNeta/fleteTotal)*100 : 0;
           const margenColor = margen>=20?"#10B981":margen>=10?"#F59E0B":"#EF4444";
@@ -1101,16 +1588,56 @@ const guardarRutaFrecuente = async () => {
                 ["Empresa",        empresa||"—"],
                 ["Tonelaje",       tonelaje?`${tonelaje} ton`:"—"],
                 ["Flete total",    fmt(fleteTotal)],
-                ["Combustible",    fmt(costoAcpm)],
+                ["Combustible",    fmt(costoAcpm + costoAdbl)],
+                [`Peajes (${peajesRuta.length} casetas)`, fmt(totPeajes)],
                 ["Conductor",      fmt(costoConduct)],
                 ["Otros costos",   fmt(n(carpado)+n(gastosViaje))],
               ].map(([k,v])=>(
                 <div key={k} style={{ display:"flex",justifyContent:"space-between",
-                  padding:"8px 0",borderBottom:"1px solid #E0E9FF" }}>
-                  <span style={{ fontSize:"15px",color:"#6B7280",fontWeight:600 }}>{k}</span>
-                  <span style={{ fontSize:"15px",color:"#111827",fontWeight:700 }}>{v}</span>
+                  padding:"8px 0",borderBottom:"1px solid var(--border-color, rgba(255,255,255,0.08))" }}>
+                  <span style={{ fontSize:"14px",color:"var(--text-secondary, #94A3B8)",fontWeight:600 }}>{k}</span>
+                  <span style={{ fontSize:"14px",color:"var(--text-primary, #F8FAFC)",fontWeight:700 }}>{v}</span>
                 </div>
               ))}
+
+              {/* Checkbox para Guardar como Ruta Frecuente */}
+              <div style={{
+                marginTop: "18px",
+                padding: "14px",
+                background: "rgba(37, 99, 235, 0.12)",
+                border: "1.5px solid rgba(59, 130, 246, 0.4)",
+                borderRadius: "12px"
+              }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={guardarComoFrecuente}
+                    onChange={e => {
+                      setGuardarComoFrecuente(e.target.checked);
+                      if (e.target.checked && !nombreRutaFrecuente) {
+                        setNombreRutaFrecuente(origen && destino ? `${origen} → ${destino}` : (nombreRuta || ruta));
+                      }
+                    }}
+                    style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#2563EB" }}
+                  />
+                  <span style={{ fontSize: "13.5px", fontWeight: 700, color: "var(--text-primary, #F8FAFC)" }}>
+                    ⭐ Guardar también como Ruta Frecuente
+                  </span>
+                </label>
+                <p style={{ fontSize: "11.5px", color: "var(--text-secondary, #94A3B8)", margin: "4px 0 0 28px" }}>
+                  Te permitirá precargar kilómetros, combustible y peajes en futuros viajes con un solo clic.
+                </p>
+
+                {guardarComoFrecuente && (
+                  <div style={{ marginTop: "10px", marginLeft: "28px" }}>
+                    <WizardInput
+                      placeholder="Nombre de la ruta frecuente (Ej: Barranquilla → Bogotá)"
+                      value={nombreRutaFrecuente}
+                      onChange={e => setNombreRutaFrecuente(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
             </WizardCard>
           );
         })()}
